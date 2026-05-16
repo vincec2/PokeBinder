@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+
+# npm
+npm-debug.log*
+package-lock.json
+
+# yarn
+yarn-debug.log*
+yarn-error.log*
+
+# pnpm
+pnpm-debug.log*
+
+# build output
+dist/
+build/
+cdk.out/
+
+# environment variables
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# logs
+logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# TypeScript
+*.tsbuildinfo

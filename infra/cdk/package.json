@@ -1,0 +1,22 @@
+{
+  "name": "pokebinder-cdk",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "synth": "cdk synth",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.200.0",
+    "constructs": "^10.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.8.0",
+    "aws-cdk": "^2.1122.0",
+    "esbuild": "^0.28.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  }
+}
+
+
