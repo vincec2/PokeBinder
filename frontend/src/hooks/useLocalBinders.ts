@@ -221,9 +221,10 @@ export function useLocalBinders() {
     }));
   }
 
-  function createBinder() {
+  function createBinder(layout: BinderLayout) {
     const newBinder = createDefaultBinder(
-      `Binder ${state.binders.length + 1}`
+      `Binder ${state.binders.length + 1}`,
+      layout
     );
 
     setState((currentState) => ({
@@ -267,6 +268,20 @@ export function useLocalBinders() {
     return freshState.activeBinderId;
   }
 
+  function updatePreviewPageColor(binderId: string, previewPageColor: string) {
+    const isValidHexColor = /^#[0-9a-fA-F]{6}$/.test(previewPageColor);
+
+    if (!isValidHexColor) {
+      return;
+    }
+
+    updateBinder(binderId, (currentBinder) => ({
+      ...currentBinder,
+      previewPageColor,
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+
   const lastActiveBinderId =
     state.binders.find((binder) => binder.binderId === state.activeBinderId)
       ?.binderId ?? state.binders[0].binderId;
@@ -286,5 +301,6 @@ export function useLocalBinders() {
     createBinder,
     deleteBinder,
     resetAllLocalData,
+    updatePreviewPageColor,
   };
 }

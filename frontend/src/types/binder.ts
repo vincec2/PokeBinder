@@ -29,5 +29,6 @@ export type Binder = {
   slots: BinderSlot[];
   isPublic: boolean;
   shareId: string | null;
+  previewPageColor: string;
   updatedAt: string;
 };

@@ -4,13 +4,14 @@ import { BinderGrid } from "../components/BinderGrid";
 import { BinderSidebar } from "../components/BinderSidebar";
 import { CardSearch } from "../components/CardSearch";
 import type { Binder, BinderLayout } from "../types/binder";
-import { BINDER_LAYOUT_OPTIONS, BINDER_LAYOUT_SLOT_COUNTS } from "../types/binder";
+import { BinderPreview } from "../components/BinderPreview";
+import { BINDER_LAYOUT_SLOT_COUNTS } from "../types/binder";
 import type { CardStatus, PokemonCard } from "../types/card";
 
 type BinderEditorPageProps = {
   binders: Binder[];
   onSetActiveBinder: (binderId: string) => void;
-  onCreateBinder: () => string;
+  onCreateBinder: (layout: BinderLayout) => string;
   onDeleteBinder: (binderId: string) => string | null;
   onSelectCard: (binderId: string, slotKey: string, card: PokemonCard) => void;
   onRemoveCard: (binderId: string, slotKey: string) => void;
@@ -21,10 +22,13 @@ type BinderEditorPageProps = {
   ) => void;
   onUpdateBinderName: (binderId: string, name: string) => void;
   onUpdateBinderDescription: (binderId: string, description: string) => void;
-  onChangeLayout: (binderId: string, layout: BinderLayout) => void;
   onCreateShareLink: (binderId: string) => string;
   onDisableShareLink: (binderId: string) => void;
   onResetAllLocalData: () => void;
+  onUpdatePreviewPageColor: (
+    binderId: string,
+    previewBackgroundColor: string
+  ) => void;
 };
 
 export function BinderEditorPage({
@@ -37,14 +41,15 @@ export function BinderEditorPage({
   onChangeStatus,
   onUpdateBinderName,
   onUpdateBinderDescription,
-  onChangeLayout,
   onCreateShareLink,
   onDisableShareLink,
   onResetAllLocalData,
+  onUpdatePreviewPageColor,
 }: BinderEditorPageProps) {
   const { binderId } = useParams();
   const navigate = useNavigate();
   const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const activeBinder = binders.find((binder) => binder.binderId === binderId);
 
@@ -72,8 +77,8 @@ export function BinderEditorPage({
     }
   }, [activeBinder, selectedSlotKey]);
 
-  function handleCreateBinder() {
-    const newBinderId = onCreateBinder();
+  function handleCreateBinder(layout: BinderLayout) {
+    const newBinderId = onCreateBinder(layout);
     navigate(`/binders/${newBinderId}`);
   }
 
@@ -144,6 +149,28 @@ export function BinderEditorPage({
           <button
             className="secondary-button"
             type="button"
+            onClick={() => setIsPreviewOpen(true)}
+          >
+            Preview Binder
+          </button>
+
+          <input
+            className="preview-color-picker"
+            type="color"
+            aria-label="Preview page colour"
+            title="Preview page colour"
+            value={activeBinder.previewPageColor}
+            onChange={(event) =>
+              onUpdatePreviewPageColor(
+                activeBinder.binderId,
+                event.target.value
+              )
+            }
+          />
+
+          <button
+            className="secondary-button"
+            type="button"
             onClick={onResetAllLocalData}
           >
             Reset all local data
@@ -182,25 +209,6 @@ export function BinderEditorPage({
                   )
                 }
               />
-            </label>
-
-            <label>
-              Layout
-              <select
-                value={activeBinder.layout}
-                onChange={(event) =>
-                  onChangeLayout(
-                    activeBinder.binderId,
-                    event.target.value as BinderLayout
-                  )
-                }
-              >
-                {BINDER_LAYOUT_OPTIONS.map((layout) => (
-                  <option key={layout} value={layout}>
-                    {layout}
-                  </option>
-                ))}
-              </select>
             </label>
           </section>
 
@@ -280,6 +288,34 @@ export function BinderEditorPage({
           </div>
         </div>
       </div>
+      {isPreviewOpen && (
+        <div
+          className="preview-modal-backdrop"
+          onClick={() => setIsPreviewOpen(false)}
+        >
+          <div
+            className="preview-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="preview-modal-header">
+              <div>
+                <p className="eyebrow">Binder Preview</p>
+                <h2>{activeBinder.name}</h2>
+              </div>
+
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setIsPreviewOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+
+            <BinderPreview binder={activeBinder} />
+          </div>
+        </div>
+      )}
     </main>
   );
 }

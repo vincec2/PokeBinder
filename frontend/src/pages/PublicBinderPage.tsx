@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router";
-import { StatusBadge } from "../components/StatusBadge";
+import { BinderPreview } from "../components/BinderPreview";
 import type { Binder } from "../types/binder";
 import { BINDER_LAYOUT_SLOT_COUNTS } from "../types/binder";
 
@@ -60,26 +60,8 @@ export function PublicBinderPage({ binders }: PublicBinderPageProps) {
       </section>
 
       <section className="binder-grid-section">
-        <h2>Shared Binder Page 1</h2>
-
-        <div className={`binder-grid layout-${binder.layout}`}>
-          {visibleSlots.map((slot) => (
-            <article className="public-card-slot" key={slot.slotKey}>
-              {slot.card ? (
-                <>
-                  <img src={slot.card.imageUrl} alt={slot.card.name} />
-                  <div className="slot-card-info">
-                    <strong>{slot.card.name}</strong>
-                    <small>{slot.card.setName}</small>
-                    <StatusBadge status={slot.status} />
-                  </div>
-                </>
-              ) : (
-                <span className="empty-slot-text">Empty Slot</span>
-              )}
-            </article>
-          ))}
-        </div>
+        <h2>Shared Binder Preview</h2>
+        <BinderPreview binder={binder} />
       </section>
     </main>
   );

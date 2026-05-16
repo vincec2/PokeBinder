@@ -1,6 +1,8 @@
 import type { Binder, BinderLayout, BinderSlot } from "../types/binder";
 import { BINDER_LAYOUT_SLOT_COUNTS } from "../types/binder";
 
+export const DEFAULT_PREVIEW_PAGE_COLOR = "#1b1814";
+
 export function generateId(prefix: string) {
   const randomPart =
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -89,23 +91,27 @@ export function normalizeBinder(binder: Binder): Binder {
       layout,
       isPublic: binder.isPublic ?? false,
       shareId: binder.shareId ?? null,
+      previewPageColor:
+        binder.previewPageColor ?? DEFAULT_PREVIEW_PAGE_COLOR,
     },
     layout
   );
 }
 
 export function createDefaultBinder(
-  name = "My First Pokémon Binder"
+  name = "My First Pokémon Binder",
+  layout: BinderLayout = "3x3"
 ): Binder {
   return {
     binderId: generateId("binder"),
     name,
     description: "A local prototype binder saved in this browser.",
     pageNumber: 1,
-    layout: "3x3",
-    slots: createEmptySlots("3x3", 1),
+    layout,
+    slots: createEmptySlots(layout, 1),
     isPublic: false,
     shareId: null,
+    previewPageColor: DEFAULT_PREVIEW_PAGE_COLOR,
     updatedAt: new Date().toISOString(),
   };
 }

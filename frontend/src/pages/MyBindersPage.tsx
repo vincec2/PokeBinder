@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import type { Binder } from "../types/binder";
+import type { Binder, BinderLayout } from "../types/binder";
 
 type MyBindersPageProps = {
   binders: Binder[];
-  onCreateBinder: () => string;
+  onCreateBinder: (layout: BinderLayout) => string;
   onDeleteBinder: (binderId: string) => string | null;
   onResetAllLocalData: () => void;
 };
@@ -15,9 +16,10 @@ export function MyBindersPage({
   onResetAllLocalData,
 }: MyBindersPageProps) {
   const navigate = useNavigate();
+  const [isChoosingLayout, setIsChoosingLayout] = useState(false);
 
-  function handleCreateBinder() {
-    const newBinderId = onCreateBinder();
+  function handleCreateBinder(layout: BinderLayout) {
+    const newBinderId = onCreateBinder(layout);
     navigate(`/binders/${newBinderId}`);
   }
 
@@ -39,7 +41,11 @@ export function MyBindersPage({
         </div>
 
         <div className="header-actions">
-          <button className="primary-button button-reset" type="button" onClick={handleCreateBinder}>
+          <button
+            className="primary-button button-reset"
+            type="button"
+            onClick={() => setIsChoosingLayout((current) => !current)}
+          >
             New Binder
           </button>
 
@@ -52,6 +58,26 @@ export function MyBindersPage({
           </button>
         </div>
       </header>
+
+      {isChoosingLayout && (
+        <section className="new-binder-page-panel">
+          <div>
+            <p className="eyebrow">Choose Layout</p>
+            <h2>Create a new binder</h2>
+            <p>Select the binder size now. You will not be able to change it later.</p>
+          </div>
+
+          <div className="new-binder-page-actions">
+            <button type="button" onClick={() => handleCreateBinder("2x2")}>
+              Create 2x2 Binder
+            </button>
+
+            <button type="button" onClick={() => handleCreateBinder("3x3")}>
+              Create 3x3 Binder
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="binder-card-grid">
         {binders.map((binder) => {

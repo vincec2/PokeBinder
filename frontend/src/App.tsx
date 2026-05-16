@@ -17,12 +17,12 @@ function App() {
     changeStatus,
     updateBinderName,
     updateBinderDescription,
-    changeLayout,
     createShareLink,
     disableShareLink,
     createBinder,
     deleteBinder,
     resetAllLocalData,
+    updatePreviewPageColor,
   } = useLocalBinders();
 
   return (
@@ -67,10 +67,10 @@ function App() {
             onChangeStatus={changeStatus}
             onUpdateBinderName={updateBinderName}
             onUpdateBinderDescription={updateBinderDescription}
-            onChangeLayout={changeLayout}
             onCreateShareLink={createShareLink}
             onDisableShareLink={disableShareLink}
             onResetAllLocalData={resetAllLocalData}
+            onUpdatePreviewPageColor={updatePreviewPageColor}
           />
         }
       />
