@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import type { Binder, BinderLayout } from "../types/binder";
+import { LogoutButton } from "../components/LogoutButton";
 
 type MyBindersPageProps = {
   binders: Binder[];
-  onCreateBinder: (layout: BinderLayout) => string;
-  onDeleteBinder: (binderId: string) => string | null;
+  onCreateBinder: (layout: BinderLayout) => Promise<string>;
+  onDeleteBinder: (binderId: string) => Promise<string | null>;
   onResetAllLocalData: () => void;
 };
 
@@ -18,13 +19,13 @@ export function MyBindersPage({
   const navigate = useNavigate();
   const [isChoosingLayout, setIsChoosingLayout] = useState(false);
 
-  function handleCreateBinder(layout: BinderLayout) {
-    const newBinderId = onCreateBinder(layout);
+  async function handleCreateBinder(layout: BinderLayout) {
+    const newBinderId = await onCreateBinder(layout);
     navigate(`/binders/${newBinderId}`);
   }
 
-  function handleDeleteBinder(binderId: string) {
-    const nextBinderId = onDeleteBinder(binderId);
+  async function handleDeleteBinder(binderId: string) {
+    const nextBinderId = await onDeleteBinder(binderId);
 
     if (nextBinderId) {
       navigate("/my-binders");
@@ -56,6 +57,8 @@ export function MyBindersPage({
           >
             Reset all local data
           </button>
+
+          <LogoutButton />
         </div>
       </header>
 

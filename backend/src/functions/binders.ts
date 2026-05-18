@@ -1,3 +1,4 @@
+import { getUserIdFromEvent } from "../lib/auth.js";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { randomUUID } from "node:crypto";
 import {
@@ -18,7 +19,8 @@ import type {
   BinderSlot,
 } from "../types/binder";
 
-const TEST_USER_ID = "test-user-local";
+const DEFAULT_PAGE_COUNT = 5;
+const DEFAULT_PREVIEW_PAGE_COLOR = "#1b1814";
 
 function getBindersTableName() {
   const tableName = process.env.BINDERS_TABLE_NAME;
@@ -61,8 +63,17 @@ function toApiSlot(record: BinderCardRecord): BinderSlot {
 
 function toApiBinder(record: BinderRecord, slots: BinderSlot[] = []): Binder {
   return {
-    ...record,
+    binderId: record.binderId,
+    name: record.name,
+    description: record.description,
+    pageNumber: record.pageNumber,
+    pageCount: record.pageCount,
+    layout: record.layout,
     slots,
+    isPublic: record.isPublic,
+    shareId: record.shareId ?? null,
+    previewPageColor: record.previewPageColor,
+    updatedAt: record.updatedAt,
   };
 }
 
@@ -90,12 +101,12 @@ function getBinderId(event: APIGatewayProxyEventV2) {
   return event.pathParameters?.binderId;
 }
 
-async function getBinderRecord(binderId: string) {
+async function getBinderRecord(userId: string, binderId: string) {
   const result = await documentClient.send(
     new GetCommand({
       TableName: getBindersTableName(),
       Key: {
-        userId: TEST_USER_ID,
+        userId: userId,
         binderId,
       },
     })
@@ -164,7 +175,7 @@ async function deleteBinderSlots(binderId: string) {
   }
 }
 
-async function listBinders() {
+async function listBinders(userId: string) {
   const result = await documentClient.send(
     new QueryCommand({
       TableName: getBindersTableName(),
@@ -173,7 +184,7 @@ async function listBinders() {
         "#userId": "userId",
       },
       ExpressionAttributeValues: {
-        ":userId": TEST_USER_ID,
+        ":userId": userId,
       },
     })
   );
@@ -189,7 +200,7 @@ async function listBinders() {
   });
 }
 
-async function getBinder(event: APIGatewayProxyEventV2) {
+async function getBinder(userId: string, event: APIGatewayProxyEventV2) {
   const binderId = getBinderId(event);
 
   if (!binderId) {
@@ -198,7 +209,7 @@ async function getBinder(event: APIGatewayProxyEventV2) {
     });
   }
 
-  const binderRecord = await getBinderRecord(binderId);
+  const binderRecord = await getBinderRecord(userId, binderId);
 
   if (!binderRecord) {
     return jsonResponse(404, {
@@ -213,7 +224,7 @@ async function getBinder(event: APIGatewayProxyEventV2) {
   });
 }
 
-async function createBinder(event: APIGatewayProxyEventV2) {
+async function createBinder(event: APIGatewayProxyEventV2, userId: string) {
   const body = parseJsonBody(event);
 
   if (body === null) {
@@ -225,7 +236,7 @@ async function createBinder(event: APIGatewayProxyEventV2) {
   const now = new Date().toISOString();
 
   const binderRecord: BinderRecord = {
-    userId: TEST_USER_ID,
+    userId,
     binderId: `binder_${randomUUID()}`,
     name:
       typeof body.name === "string" && body.name.trim()
@@ -234,9 +245,17 @@ async function createBinder(event: APIGatewayProxyEventV2) {
     description:
       typeof body.description === "string" ? body.description.trim() : "",
     pageNumber: 1,
+    pageCount:
+      typeof body.pageCount === "number" && body.pageCount > 0
+        ? Math.min(body.pageCount, DEFAULT_PAGE_COUNT)
+        : DEFAULT_PAGE_COUNT,
+    previewPageColor:
+      typeof body.previewPageColor === "string" &&
+      /^#[0-9a-fA-F]{6}$/.test(body.previewPageColor)
+        ? body.previewPageColor
+        : DEFAULT_PREVIEW_PAGE_COLOR,
     layout: getValidatedLayout(body.layout),
     isPublic: false,
-    shareId: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -255,7 +274,7 @@ async function createBinder(event: APIGatewayProxyEventV2) {
   });
 }
 
-async function updateBinder(event: APIGatewayProxyEventV2) {
+async function updateBinder(event: APIGatewayProxyEventV2, userId: string) {
   const binderId = getBinderId(event);
 
   if (!binderId) {
@@ -287,6 +306,12 @@ async function updateBinder(event: APIGatewayProxyEventV2) {
       ? body.layout
       : undefined;
 
+  const previewPageColor =
+    typeof body.previewPageColor === "string" &&
+    /^#[0-9a-fA-F]{6}$/.test(body.previewPageColor)
+      ? body.previewPageColor
+      : undefined;
+
   const updateParts = ["#updatedAt = :updatedAt"];
   const expressionAttributeNames: Record<string, string> = {
     "#updatedAt": "updatedAt",
@@ -307,6 +332,12 @@ async function updateBinder(event: APIGatewayProxyEventV2) {
     expressionAttributeValues[":description"] = description;
   }
 
+  if (previewPageColor !== undefined) {
+    updateParts.push("#previewPageColor = :previewPageColor");
+    expressionAttributeNames["#previewPageColor"] = "previewPageColor";
+    expressionAttributeValues[":previewPageColor"] = previewPageColor;
+  }
+
   if (layout !== undefined) {
     updateParts.push("#layout = :layout");
     expressionAttributeNames["#layout"] = "layout";
@@ -324,7 +355,7 @@ async function updateBinder(event: APIGatewayProxyEventV2) {
       new UpdateCommand({
         TableName: getBindersTableName(),
         Key: {
-          userId: TEST_USER_ID,
+          userId: userId,
           binderId,
         },
         UpdateExpression: `SET ${updateParts.join(", ")}`,
@@ -356,7 +387,7 @@ async function updateBinder(event: APIGatewayProxyEventV2) {
   }
 }
 
-async function deleteBinder(event: APIGatewayProxyEventV2) {
+async function deleteBinder(event: APIGatewayProxyEventV2, userId: string) {
   const binderId = getBinderId(event);
 
   if (!binderId) {
@@ -365,7 +396,7 @@ async function deleteBinder(event: APIGatewayProxyEventV2) {
     });
   }
 
-  const binderRecord = await getBinderRecord(binderId);
+  const binderRecord = await getBinderRecord(userId, binderId);
 
   if (!binderRecord) {
     return jsonResponse(404, {
@@ -379,7 +410,7 @@ async function deleteBinder(event: APIGatewayProxyEventV2) {
     new DeleteCommand({
       TableName: getBindersTableName(),
       Key: {
-        userId: TEST_USER_ID,
+        userId: userId,
         binderId,
       },
     })
@@ -390,29 +421,163 @@ async function deleteBinder(event: APIGatewayProxyEventV2) {
   });
 }
 
+function generateShareId() {
+  return `share-${randomUUID()}`;
+}
+
+async function createShareLink(event: APIGatewayProxyEventV2, userId: string) {
+  const binderId = event.pathParameters?.binderId;
+
+  if (!binderId) {
+    return jsonResponse(400, {
+      message: "Missing binderId.",
+    });
+  }
+
+  const shareId = generateShareId();
+  const updatedAt = new Date().toISOString();
+
+  try {
+    const result = await documentClient.send(
+      new UpdateCommand({
+        TableName: getBindersTableName(),
+        Key: {
+          userId,
+          binderId,
+        },
+        UpdateExpression:
+          "SET #isPublic = :isPublic, #shareId = :shareId, #updatedAt = :updatedAt",
+        ConditionExpression:
+          "attribute_exists(userId) AND attribute_exists(binderId)",
+        ExpressionAttributeNames: {
+          "#isPublic": "isPublic",
+          "#shareId": "shareId",
+          "#updatedAt": "updatedAt",
+        },
+        ExpressionAttributeValues: {
+          ":isPublic": true,
+          ":shareId": shareId,
+          ":updatedAt": updatedAt,
+        },
+        ReturnValues: "ALL_NEW",
+      })
+    );
+
+    const updatedBinderRecord = result.Attributes as BinderRecord;
+    const slots = await getBinderSlots(binderId);
+
+    return jsonResponse(200, {
+      binder: toApiBinder(updatedBinderRecord, slots),
+      shareId,
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.name === "ConditionalCheckFailedException"
+    ) {
+      return jsonResponse(404, {
+        message: "Binder not found.",
+      });
+    }
+
+    throw error;
+  }
+}
+
+async function disableShareLink(event: APIGatewayProxyEventV2, userId: string) {
+  const binderId = event.pathParameters?.binderId;
+
+  if (!binderId) {
+    return jsonResponse(400, {
+      message: "Missing binderId.",
+    });
+  }
+
+  const updatedAt = new Date().toISOString();
+
+  try {
+    const result = await documentClient.send(
+      new UpdateCommand({
+        TableName: getBindersTableName(),
+        Key: {
+          userId,
+          binderId,
+        },
+        UpdateExpression:
+          "SET #isPublic = :isPublic, #updatedAt = :updatedAt REMOVE #shareId",
+        ConditionExpression:
+          "attribute_exists(userId) AND attribute_exists(binderId)",
+        ExpressionAttributeNames: {
+          "#isPublic": "isPublic",
+          "#updatedAt": "updatedAt",
+          "#shareId": "shareId",
+        },
+        ExpressionAttributeValues: {
+          ":isPublic": false,
+          ":updatedAt": updatedAt,
+        },
+        ReturnValues: "ALL_NEW",
+      })
+    );
+
+    const updatedBinderRecord = result.Attributes as BinderRecord;
+    const slots = await getBinderSlots(binderId);
+
+    return jsonResponse(200, {
+      binder: toApiBinder(updatedBinderRecord, slots),
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.name === "ConditionalCheckFailedException"
+    ) {
+      return jsonResponse(404, {
+        message: "Binder not found.",
+      });
+    }
+
+    throw error;
+  }
+}
+
 export async function handler(event: APIGatewayProxyEventV2) {
   try {
+    const userId = getUserIdFromEvent(event);
     const method = event.requestContext.http.method;
     const binderId = getBinderId(event);
 
     if (method === "GET" && !binderId) {
-      return listBinders();
+      return listBinders(userId);
     }
 
     if (method === "GET" && binderId) {
-      return getBinder(event);
+      return getBinder(userId, event);
     }
 
     if (method === "POST" && !binderId) {
-      return createBinder(event);
+      return createBinder(event, userId);
+    }
+
+    if (
+      event.requestContext.http.method === "POST" &&
+      event.rawPath.match(/^\/binders\/[^/]+\/share$/)
+    ) {
+      return createShareLink(event, userId);
+    }
+
+    if (
+      event.requestContext.http.method === "DELETE" &&
+      event.rawPath.match(/^\/binders\/[^/]+\/share$/)
+    ) {
+      return disableShareLink(event, userId);
     }
 
     if (method === "PUT" && binderId) {
-      return updateBinder(event);
+      return updateBinder(event, userId);
     }
 
     if (method === "DELETE" && binderId) {
-      return deleteBinder(event);
+      return deleteBinder(event, userId);
     }
 
     return jsonResponse(405, {

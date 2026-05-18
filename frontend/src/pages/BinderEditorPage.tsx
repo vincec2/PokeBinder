@@ -8,12 +8,13 @@ import { BinderSpreadControls } from "../components/BinderSpreadControls";
 import { BinderPageControls } from "../components/BinderPageControls";
 import type { Binder, BinderLayout } from "../types/binder";
 import type { CardStatus, PokemonCard } from "../types/card";
+import { LogoutButton } from "../components/LogoutButton";
 
 type BinderEditorPageProps = {
   binders: Binder[];
   onSetActiveBinder: (binderId: string) => void;
-  onCreateBinder: (layout: BinderLayout) => string;
-  onDeleteBinder: (binderId: string) => string | null;
+  onCreateBinder: (layout: BinderLayout) => Promise<string>;
+  onDeleteBinder: (binderId: string) => Promise<string | null>;
   onSelectCard: (binderId: string, slotKey: string, card: PokemonCard) => void;
   onRemoveCard: (binderId: string, slotKey: string) => void;
   onChangeStatus: (
@@ -23,8 +24,8 @@ type BinderEditorPageProps = {
   ) => void;
   onUpdateBinderName: (binderId: string, name: string) => void;
   onUpdateBinderDescription: (binderId: string, description: string) => void;
-  onCreateShareLink: (binderId: string) => string;
-  onDisableShareLink: (binderId: string) => void;
+  onCreateShareLink: (binderId: string) => Promise<string>;
+  onDisableShareLink: (binderId: string) => Promise<void>;
   onResetAllLocalData: () => void;
   onUpdatePreviewPageColor: (
     binderId: string,
@@ -101,26 +102,29 @@ export function BinderEditorPage({
     }
   }, [activeBinder, selectedSlotKey, currentPageNumber]);
 
-  function handleCreateBinder(layout: BinderLayout) {
-    const newBinderId = onCreateBinder(layout);
+  async function handleCreateBinder(layout: BinderLayout) {
+    const newBinderId = await onCreateBinder(layout);
     navigate(`/binders/${newBinderId}`);
   }
 
-  function handleDeleteBinder(deletedBinderId: string) {
-    const nextBinderId = onDeleteBinder(deletedBinderId);
+  async function handleDeleteBinder(deletedBinderId: string) {
+    const nextBinderId = await onDeleteBinder(deletedBinderId);
 
     if (deletedBinderId === activeBinder?.binderId && nextBinderId) {
       navigate(`/binders/${nextBinderId}`);
     }
   }
 
-  function handleCreateShareLink() {
+  async function handleCreateShareLink() {
     if (!activeBinder) {
       return;
     }
 
-    const shareId = onCreateShareLink(activeBinder.binderId);
-    navigate(`/share/${shareId}`);
+    const shareId = await onCreateShareLink(activeBinder.binderId);
+
+    if (shareId) {
+      navigate(`/share/${shareId}`);
+    }
   }
 
   function handleCopyShareLink() {
@@ -202,6 +206,8 @@ export function BinderEditorPage({
           >
             Reset all local data
           </button>
+
+          <LogoutButton />
         </div>
       </header>
 
@@ -268,7 +274,7 @@ export function BinderEditorPage({
                 <button
                   className="danger-text-button"
                   type="button"
-                  onClick={() => onDisableShareLink(activeBinder.binderId)}
+                  onClick={() => void onDisableShareLink(activeBinder.binderId)}
                 >
                   Disable
                 </button>

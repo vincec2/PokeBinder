@@ -19,9 +19,16 @@ export type BinderRecord = {
   name: string;
   description: string;
   pageNumber: number;
+  pageCount: number;
   layout: BinderLayout;
+  previewPageColor: string;
   isPublic: boolean;
-  shareId: string | null;
+
+  // DynamoDB record:
+  // Private binders omit this entirely.
+  // Public binders store it as a real string.
+  shareId?: string;
+
   createdAt: string;
   updatedAt: string;
 };
@@ -45,6 +52,9 @@ export type BinderCardRecord = {
   updatedAt: string;
 };
 
-export type Binder = BinderRecord & {
+export type Binder = Omit<BinderRecord, "userId" | "createdAt" | "shareId"> & {
+  // API response:
+  // Frontend expects null when there is no share link.
+  shareId: string | null;
   slots: BinderSlot[];
 };

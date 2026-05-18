@@ -5,8 +5,8 @@ import type { Binder, BinderLayout } from "../types/binder";
 type BinderSidebarProps = {
   binders: Binder[];
   activeBinderId?: string;
-  onCreateBinder: (layout: BinderLayout) => void;
-  onDeleteBinder: (binderId: string) => void;
+  onCreateBinder: (layout: BinderLayout) => Promise<void> | void;
+  onDeleteBinder: (binderId: string) => Promise<void> | void;
 };
 
 export function BinderSidebar({
@@ -17,8 +17,8 @@ export function BinderSidebar({
 }: BinderSidebarProps) {
   const [isChoosingLayout, setIsChoosingLayout] = useState(false);
 
-  function handleCreateBinder(layout: BinderLayout) {
-    onCreateBinder(layout);
+  async function handleCreateBinder(layout: BinderLayout) {
+    await onCreateBinder(layout);
     setIsChoosingLayout(false);
   }
 

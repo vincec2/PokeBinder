@@ -1,4 +1,5 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
+import { getUserIdFromEvent } from "../lib/auth.js";
 import {
   DeleteCommand,
   GetCommand,
@@ -13,8 +14,6 @@ import type {
   BinderSlot,
 } from "../types/binder";
 import type { CardStatus, PokemonCard } from "../types/card";
-
-const TEST_USER_ID = "test-user-local";
 
 const VALID_STATUSES: CardStatus[] = [
   "owned",
@@ -121,12 +120,12 @@ function toApiSlot(record: BinderCardRecord): BinderSlot {
   };
 }
 
-async function getOwnedBinder(binderId: string) {
+async function getOwnedBinder(userId: string, binderId: string) {
   const result = await documentClient.send(
     new GetCommand({
       TableName: getBindersTableName(),
       Key: {
-        userId: TEST_USER_ID,
+        userId,
         binderId,
       },
     })
@@ -135,7 +134,7 @@ async function getOwnedBinder(binderId: string) {
   return result.Item as BinderRecord | undefined;
 }
 
-async function listBinderCards(event: APIGatewayProxyEventV2) {
+async function listBinderCards(event: APIGatewayProxyEventV2, userId: string) {
   const binderId = getBinderId(event);
 
   if (!binderId) {
@@ -144,7 +143,7 @@ async function listBinderCards(event: APIGatewayProxyEventV2) {
     });
   }
 
-  const binder = await getOwnedBinder(binderId);
+  const binder = await getOwnedBinder(userId, binderId);
 
   if (!binder) {
     return jsonResponse(404, {
@@ -176,7 +175,7 @@ async function listBinderCards(event: APIGatewayProxyEventV2) {
   });
 }
 
-async function upsertBinderCard(event: APIGatewayProxyEventV2) {
+async function upsertBinderCard(event: APIGatewayProxyEventV2, userId: string) {
   const binderId = getBinderId(event);
   const slotKey = getSlotKey(event);
 
@@ -192,7 +191,7 @@ async function upsertBinderCard(event: APIGatewayProxyEventV2) {
     });
   }
 
-  const binder = await getOwnedBinder(binderId);
+  const binder = await getOwnedBinder(userId, binderId);
 
   if (!binder) {
     return jsonResponse(404, {
@@ -221,7 +220,7 @@ async function upsertBinderCard(event: APIGatewayProxyEventV2) {
   const cardRecord: BinderCardRecord = {
     binderId,
     slotKey,
-    userId: TEST_USER_ID,
+    userId,
     cardId: body.card.cardId,
     cardName: body.card.name,
     setName: body.card.setName,
@@ -252,7 +251,7 @@ async function upsertBinderCard(event: APIGatewayProxyEventV2) {
   });
 }
 
-async function deleteBinderCard(event: APIGatewayProxyEventV2) {
+async function deleteBinderCard(event: APIGatewayProxyEventV2, userId: string) {
   const binderId = getBinderId(event);
   const slotKey = getSlotKey(event);
 
@@ -268,7 +267,7 @@ async function deleteBinderCard(event: APIGatewayProxyEventV2) {
     });
   }
 
-  const binder = await getOwnedBinder(binderId);
+  const binder = await getOwnedBinder(userId, binderId);
 
   if (!binder) {
     return jsonResponse(404, {
@@ -293,19 +292,20 @@ async function deleteBinderCard(event: APIGatewayProxyEventV2) {
 
 export async function handler(event: APIGatewayProxyEventV2) {
   try {
+    const userId = getUserIdFromEvent(event);
     const method = event.requestContext.http.method;
     const slotKey = getSlotKey(event);
 
     if (method === "GET" && !slotKey) {
-      return listBinderCards(event);
+      return listBinderCards(event, userId);
     }
 
     if (method === "PUT" && slotKey) {
-      return upsertBinderCard(event);
+      return upsertBinderCard(event, userId);
     }
 
     if (method === "DELETE" && slotKey) {
-      return deleteBinderCard(event);
+      return deleteBinderCard(event, userId);
     }
 
     return jsonResponse(405, {

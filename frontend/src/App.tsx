@@ -1,13 +1,27 @@
-import { Navigate, Route, Routes } from "react-router";
+import { Navigate, Route, Routes, useLocation } from "react-router";
+import { getStoredAuthSession } from "./auth/cognito";
 import "./App.css";
-import { useLocalBinders } from "./hooks/useLocalBinders";
+import { useApiBinders } from "./hooks/useApiBinders";
 import { BinderEditorPage } from "./pages/BinderEditorPage";
 import { HomePage } from "./pages/HomePage";
 import { MyBindersPage } from "./pages/MyBindersPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PublicBinderPage } from "./pages/PublicBinderPage";
+import { LoginPage } from "./pages/LoginPage";
+import { RegisterPage } from "./pages/RegisterPage";
 
 function App() {
+  const location = useLocation();
+  const hasAuthSession = !!getStoredAuthSession();
+
+  const isAuthRoute =
+    location.pathname === "/login" || location.pathname === "/register";
+
+  const isPublicRoute =
+    location.pathname === "/" ||
+    location.pathname.startsWith("/share/") ||
+    isAuthRoute;
+
   const {
     state,
     lastActiveBinderId,
@@ -23,7 +37,47 @@ function App() {
     deleteBinder,
     resetAllLocalData,
     updatePreviewPageColor,
-  } = useLocalBinders();
+    isLoading,
+    errorMessage,
+    reloadBinders,
+  } = useApiBinders({
+    enabled: hasAuthSession,
+  });
+
+  if (!hasAuthSession && !isPublicRoute) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (isLoading) {
+    return (
+      <main className="app-shell">
+        <section className="not-found-card">
+          <p className="eyebrow">Loading</p>
+          <h1>Loading your binders...</h1>
+        </section>
+      </main>
+    );
+  }
+
+  if (errorMessage && state.binders.length === 0) {
+    return (
+      <main className="app-shell">
+        <section className="not-found-card">
+          <p className="eyebrow">API Error</p>
+          <h1>Could not load your binders.</h1>
+          <p>{errorMessage}</p>
+
+          <button
+            className="primary-button button-reset"
+            type="button"
+            onClick={() => void reloadBinders()}
+          >
+            Try Again
+          </button>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <Routes>
@@ -54,6 +108,9 @@ function App() {
         element={<Navigate to={`/binders/${lastActiveBinderId}`} replace />}
       />
 
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+
       <Route
         path="/binders/:binderId"
         element={
@@ -75,10 +132,7 @@ function App() {
         }
       />
 
-      <Route
-        path="/share/:shareId"
-        element={<PublicBinderPage binders={state.binders} />}
-      />
+      <Route path="/share/:shareId" element={<PublicBinderPage />} />
 
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
