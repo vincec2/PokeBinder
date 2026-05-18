@@ -3,7 +3,6 @@ import {
   ConfirmSignUpCommand,
   GlobalSignOutCommand,
   InitiateAuthCommand,
-  SignUpCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 
 const AWS_REGION = import.meta.env.VITE_AWS_REGION as string | undefined;
