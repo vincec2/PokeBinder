@@ -64,23 +64,47 @@ export function clearAuthSession() {
   localStorage.removeItem(AUTH_STORAGE_KEY);
 }
 
-export async function registerUser(email: string, password: string) {
-  const client = createCognitoClient();
-  const { clientId } = getCognitoConfig();
+const API_BASE_URL = import.meta.env.VITE_API_URL as string | undefined;
 
-  await client.send(
-    new SignUpCommand({
-      ClientId: clientId,
-      Username: email,
-      Password: password,
-      UserAttributes: [
-        {
-          Name: "email",
-          Value: email,
-        },
-      ],
-    })
-  );
+function getApiBaseUrl() {
+  if (!API_BASE_URL) {
+    throw new Error(
+      "Missing VITE_API_URL. Add it to frontend/.env.local and restart Vite."
+    );
+  }
+
+  return API_BASE_URL.replace(/\/$/, "");
+}
+
+async function readAuthErrorMessage(response: Response) {
+  try {
+    const body = (await response.json()) as { message?: string };
+    return body.message ?? `Request failed with ${response.status}`;
+  } catch {
+    return `Request failed with ${response.status}`;
+  }
+}
+
+export async function registerUser(
+  email: string,
+  password: string,
+  inviteCode: string
+) {
+  const response = await fetch(`${getApiBaseUrl()}/auth/register`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      email,
+      password,
+      inviteCode,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readAuthErrorMessage(response));
+  }
 }
 
 export async function confirmUser(email: string, confirmationCode: string) {

@@ -24,6 +24,13 @@ export class PokebinderStack extends Stack {
     const repoRoot = path.join(__dirname, "../../..");
     const backendRoot = path.join(repoRoot, "backend");
 
+    const inviteCode = process.env.POKEBINDER_INVITE_CODE;
+    if (!inviteCode) {
+      throw new Error(
+        "Missing POKEBINDER_INVITE_CODE. Set it before running CDK deploy."
+      );
+    }
+
     const bindersTable = new Table(this, "BindersTable", {
       partitionKey: {
         name: "userId",
@@ -82,6 +89,21 @@ export class PokebinderStack extends Stack {
       authFlows: {
         userSrp: true,
         userPassword: true,
+      },
+    });
+
+    const authFunction = new NodejsFunction(this, "AuthFunction", {
+      entry: path.join(backendRoot, "src/functions/auth.ts"),
+      handler: "handler",
+      runtime: Runtime.NODEJS_20_X,
+      projectRoot: backendRoot,
+      depsLockFilePath: path.join(backendRoot, "package-lock.json"),
+      environment: {
+        USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
+        INVITE_CODE: inviteCode,
+      },
+      bundling: {
+        externalModules: [],
       },
     });
 
@@ -184,6 +206,11 @@ export class PokebinderStack extends Stack {
       bindersFunction
     );
 
+    const authIntegration = new HttpLambdaIntegration(
+      "AuthIntegration",
+      authFunction
+    );
+
     const binderCardsIntegration = new HttpLambdaIntegration(
       "BinderCardsIntegration",
       binderCardsFunction
@@ -198,6 +225,12 @@ export class PokebinderStack extends Stack {
       path: "/health",
       methods: [HttpMethod.GET],
       integration: healthIntegration,
+    });
+
+    httpApi.addRoutes({
+      path: "/auth/register",
+      methods: [HttpMethod.POST],
+      integration: authIntegration,
     });
 
     httpApi.addRoutes({

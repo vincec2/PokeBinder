@@ -10,6 +10,7 @@ export function RegisterPage() {
 
   const [confirmationCode, setConfirmationCode] = useState("");
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -23,7 +24,7 @@ export function RegisterPage() {
     setSuccessMessage(null);
 
     try {
-      await registerUser(email.trim(), password);
+      await registerUser(email.trim(), password, inviteCode);
 
       setNeedsConfirmation(true);
       setSuccessMessage(
@@ -87,6 +88,16 @@ export function RegisterPage() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 required
+              />
+            </label>
+
+            <label>
+              Invite code
+              <input
+                value={inviteCode}
+                onChange={(event) => setInviteCode(event.target.value)}
+                placeholder="Enter invite code"
+                autoComplete="off"
               />
             </label>
 
