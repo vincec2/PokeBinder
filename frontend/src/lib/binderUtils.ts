@@ -1,5 +1,5 @@
 import type { Binder, BinderLayout, BinderSlot } from "../types/binder";
-import { BINDER_LAYOUT_SLOT_COUNTS } from "../types/binder";
+import { BINDER_LAYOUT_SLOT_COUNTS, MAX_BINDER_PAGES } from "../types/binder";
 
 export const DEFAULT_PREVIEW_PAGE_COLOR = "#1b1814";
 
@@ -35,9 +35,9 @@ export function createSlot(pageNumber: number, slotNumber: number): BinderSlot {
   };
 }
 
-export function createEmptySlots(
-  layout: BinderLayout = "3x3",
-  pageNumber = 1
+export function createSlotsForPage(
+  layout: BinderLayout,
+  pageNumber: number
 ): BinderSlot[] {
   const slotCount = BINDER_LAYOUT_SLOT_COUNTS[layout];
 
@@ -46,56 +46,54 @@ export function createEmptySlots(
   );
 }
 
-export function ensureSlotsForLayout(
-  binder: Binder,
-  layout: BinderLayout
-): Binder {
-  const requiredSlotCount = BINDER_LAYOUT_SLOT_COUNTS[layout];
+export function createEmptySlots(
+  layout: BinderLayout = "3x3",
+  pageCount = MAX_BINDER_PAGES
+): BinderSlot[] {
+  return Array.from({ length: pageCount }, (_, pageIndex) =>
+    createSlotsForPage(layout, pageIndex + 1)
+  ).flat();
+}
 
-  if (binder.slots.length >= requiredSlotCount) {
-    return {
-      ...binder,
-      layout,
-      updatedAt: new Date().toISOString(),
-    };
-  }
+export function ensureSlotsForBinder(binder: Binder): Binder {
+  const pageCount = binder.pageCount ?? MAX_BINDER_PAGES;
+  const slotCount = BINDER_LAYOUT_SLOT_COUNTS[binder.layout];
 
-  const existingSlotNumbers = new Set(
-    binder.slots.map((slot) => slot.slotNumber)
+  const existingSlotsByKey = new Map(
+    binder.slots.map((slot) => [slot.slotKey, slot])
   );
 
-  const slotsToAdd: BinderSlot[] = [];
+  const completeSlots: BinderSlot[] = [];
 
-  for (let slotNumber = 1; slotNumber <= requiredSlotCount; slotNumber += 1) {
-    if (!existingSlotNumbers.has(slotNumber)) {
-      slotsToAdd.push(createSlot(1, slotNumber));
+  for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+    for (let slotNumber = 1; slotNumber <= slotCount; slotNumber += 1) {
+      const emptySlot = createSlot(pageNumber, slotNumber);
+      const existingSlot = existingSlotsByKey.get(emptySlot.slotKey);
+
+      completeSlots.push(existingSlot ?? emptySlot);
     }
   }
 
   return {
     ...binder,
-    layout,
-    slots: [...binder.slots, ...slotsToAdd].sort(
-      (a, b) => a.slotNumber - b.slotNumber
+    pageCount,
+    slots: completeSlots.sort(
+      (a, b) => a.pageNumber - b.pageNumber || a.slotNumber - b.slotNumber
     ),
-    updatedAt: new Date().toISOString(),
   };
 }
 
 export function normalizeBinder(binder: Binder): Binder {
-  const layout = binder.layout ?? "3x3";
+  const normalizedBinder: Binder = {
+    ...binder,
+    layout: binder.layout ?? "3x3",
+    pageCount: binder.pageCount ?? MAX_BINDER_PAGES,
+    isPublic: binder.isPublic ?? false,
+    shareId: binder.shareId ?? null,
+    previewPageColor: binder.previewPageColor ?? DEFAULT_PREVIEW_PAGE_COLOR,
+  };
 
-  return ensureSlotsForLayout(
-    {
-      ...binder,
-      layout,
-      isPublic: binder.isPublic ?? false,
-      shareId: binder.shareId ?? null,
-      previewPageColor:
-        binder.previewPageColor ?? DEFAULT_PREVIEW_PAGE_COLOR,
-    },
-    layout
-  );
+  return ensureSlotsForBinder(normalizedBinder);
 }
 
 export function createDefaultBinder(
@@ -107,8 +105,9 @@ export function createDefaultBinder(
     name,
     description: "A local prototype binder saved in this browser.",
     pageNumber: 1,
+    pageCount: MAX_BINDER_PAGES,
     layout,
-    slots: createEmptySlots(layout, 1),
+    slots: createEmptySlots(layout, MAX_BINDER_PAGES),
     isPublic: false,
     shareId: null,
     previewPageColor: DEFAULT_PREVIEW_PAGE_COLOR,

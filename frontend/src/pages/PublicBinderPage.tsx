@@ -1,7 +1,8 @@
 import { Link, useParams } from "react-router";
+import { useState } from "react";
+import { BinderSpreadControls } from "../components/BinderSpreadControls";
 import { BinderPreview } from "../components/BinderPreview";
 import type { Binder } from "../types/binder";
-import { BINDER_LAYOUT_SLOT_COUNTS } from "../types/binder";
 
 type PublicBinderPageProps = {
   binders: Binder[];
@@ -9,6 +10,7 @@ type PublicBinderPageProps = {
 
 export function PublicBinderPage({ binders }: PublicBinderPageProps) {
   const { shareId } = useParams();
+  const [spreadIndex, setSpreadIndex] = useState(0);
 
   const binder = binders.find(
     (currentBinder) =>
@@ -34,8 +36,7 @@ export function PublicBinderPage({ binders }: PublicBinderPageProps) {
     );
   }
 
-  const visibleSlots = binder.slots.slice(0, BINDER_LAYOUT_SLOT_COUNTS[binder.layout]);
-  const cardCount = visibleSlots.filter((slot) => slot.card).length;
+  const cardCount = binder.slots.filter((slot) => slot.card).length;
 
   return (
     <main className="app-shell">
@@ -61,7 +62,12 @@ export function PublicBinderPage({ binders }: PublicBinderPageProps) {
 
       <section className="binder-grid-section">
         <h2>Shared Binder Preview</h2>
-        <BinderPreview binder={binder} />
+        <BinderSpreadControls
+          spreadIndex={spreadIndex}
+          onChangeSpread={setSpreadIndex}
+        />
+
+        <BinderPreview binder={binder} spreadIndex={spreadIndex} />
       </section>
     </main>
   );

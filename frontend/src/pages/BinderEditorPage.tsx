@@ -3,9 +3,10 @@ import { Link, useNavigate, useParams } from "react-router";
 import { BinderGrid } from "../components/BinderGrid";
 import { BinderSidebar } from "../components/BinderSidebar";
 import { CardSearch } from "../components/CardSearch";
-import type { Binder, BinderLayout } from "../types/binder";
 import { BinderPreview } from "../components/BinderPreview";
-import { BINDER_LAYOUT_SLOT_COUNTS } from "../types/binder";
+import { BinderSpreadControls } from "../components/BinderSpreadControls";
+import { BinderPageControls } from "../components/BinderPageControls";
+import type { Binder, BinderLayout } from "../types/binder";
 import type { CardStatus, PokemonCard } from "../types/card";
 
 type BinderEditorPageProps = {
@@ -50,8 +51,18 @@ export function BinderEditorPage({
   const navigate = useNavigate();
   const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [currentPageNumber, setCurrentPageNumber] = useState(1);
+  const [previewSpreadIndex, setPreviewSpreadIndex] = useState(0);
 
   const activeBinder = binders.find((binder) => binder.binderId === binderId);
+
+  function getSpreadIndexForPage(pageNumber: number) {
+    if (pageNumber === 1) {
+      return 0;
+    }
+
+    return Math.floor(pageNumber / 2);
+  }
 
   useEffect(() => {
     if (!activeBinder) {
@@ -59,7 +70,14 @@ export function BinderEditorPage({
     }
 
     onSetActiveBinder(activeBinder.binderId);
-    setSelectedSlotKey(activeBinder.slots[0]?.slotKey ?? null);
+    setCurrentPageNumber(1);
+    setPreviewSpreadIndex(0);
+
+    const firstVisibleSlot =
+      activeBinder.slots.find((slot) => slot.pageNumber === 1) ??
+      activeBinder.slots[0];
+
+    setSelectedSlotKey(firstVisibleSlot?.slotKey ?? null);
   }, [activeBinder?.binderId]);
 
   useEffect(() => {
@@ -67,15 +85,21 @@ export function BinderEditorPage({
       return;
     }
 
-    const visibleSlotCount = BINDER_LAYOUT_SLOT_COUNTS[activeBinder.layout];
+    const currentPageSlots = activeBinder.slots
+      .filter((slot) => slot.pageNumber === currentPageNumber)
+      .sort((a, b) => a.slotNumber - b.slotNumber);
+
     const selectedSlot = activeBinder.slots.find(
       (slot) => slot.slotKey === selectedSlotKey
     );
 
-    if (!selectedSlot || selectedSlot.slotNumber > visibleSlotCount) {
-      setSelectedSlotKey(activeBinder.slots[0]?.slotKey ?? null);
+    const selectedSlotIsOnCurrentPage =
+      !!selectedSlot && selectedSlot.pageNumber === currentPageNumber;
+
+    if (!selectedSlotIsOnCurrentPage) {
+      setSelectedSlotKey(currentPageSlots[0]?.slotKey ?? null);
     }
-  }, [activeBinder, selectedSlotKey]);
+  }, [activeBinder, selectedSlotKey, currentPageNumber]);
 
   function handleCreateBinder(layout: BinderLayout) {
     const newBinderId = onCreateBinder(layout);
@@ -149,7 +173,10 @@ export function BinderEditorPage({
           <button
             className="secondary-button"
             type="button"
-            onClick={() => setIsPreviewOpen(true)}
+            onClick={() => {
+              setPreviewSpreadIndex(getSpreadIndexForPage(currentPageNumber));
+              setIsPreviewOpen(true);
+            }}
           >
             Preview Binder
           </button>
@@ -259,22 +286,33 @@ export function BinderEditorPage({
 
           <section className="selected-slot-panel">
             <strong>Selected slot:</strong>{" "}
-            {selectedSlot ? `Slot ${selectedSlot.slotNumber}` : "None selected"}
+            {selectedSlot
+              ? `Page ${selectedSlot.pageNumber}, Slot ${selectedSlot.slotNumber}`
+              : "None selected"}
           </section>
 
           <div className="workspace-layout">
-            <BinderGrid
-              slots={activeBinder.slots}
-              layout={activeBinder.layout}
-              selectedSlotKey={selectedSlotKey}
-              onSelectSlot={setSelectedSlotKey}
-              onRemoveCard={(slotKey) =>
-                onRemoveCard(activeBinder.binderId, slotKey)
-              }
-              onChangeStatus={(slotKey, status) =>
-                onChangeStatus(activeBinder.binderId, slotKey, status)
-              }
-            />
+            <div>
+              <BinderPageControls
+                pageNumber={currentPageNumber}
+                pageCount={activeBinder.pageCount}
+                onChangePage={setCurrentPageNumber}
+              />
+
+              <BinderGrid
+                slots={activeBinder.slots}
+                layout={activeBinder.layout}
+                pageNumber={currentPageNumber}
+                selectedSlotKey={selectedSlotKey}
+                onSelectSlot={setSelectedSlotKey}
+                onRemoveCard={(slotKey) =>
+                  onRemoveCard(activeBinder.binderId, slotKey)
+                }
+                onChangeStatus={(slotKey, status) =>
+                  onChangeStatus(activeBinder.binderId, slotKey, status)
+                }
+              />
+            </div>
 
             <CardSearch
               onSelectCard={(card) => {
@@ -288,6 +326,7 @@ export function BinderEditorPage({
           </div>
         </div>
       </div>
+
       {isPreviewOpen && (
         <div
           className="preview-modal-backdrop"
@@ -312,7 +351,12 @@ export function BinderEditorPage({
               </button>
             </div>
 
-            <BinderPreview binder={activeBinder} />
+            <BinderSpreadControls
+              spreadIndex={previewSpreadIndex}
+              onChangeSpread={setPreviewSpreadIndex}
+            />
+
+            <BinderPreview binder={activeBinder} spreadIndex={previewSpreadIndex} />
           </div>
         </div>
       )}

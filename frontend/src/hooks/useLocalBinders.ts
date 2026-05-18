@@ -3,7 +3,6 @@ import type { Binder, BinderLayout } from "../types/binder";
 import type { CardStatus, PokemonCard } from "../types/card";
 import {
   createDefaultBinder,
-  ensureSlotsForLayout,
   generateId,
   normalizeBinder,
 } from "../lib/binderUtils";
@@ -189,12 +188,6 @@ export function useLocalBinders() {
     }));
   }
 
-  function changeLayout(binderId: string, layout: BinderLayout) {
-    updateBinder(binderId, (currentBinder) =>
-      ensureSlotsForLayout(currentBinder, layout)
-    );
-  }
-
   function createShareLink(binderId: string) {
     const existingBinder = state.binders.find(
       (binder) => binder.binderId === binderId
@@ -295,7 +288,6 @@ export function useLocalBinders() {
     changeStatus,
     updateBinderName,
     updateBinderDescription,
-    changeLayout,
     createShareLink,
     disableShareLink,
     createBinder,
