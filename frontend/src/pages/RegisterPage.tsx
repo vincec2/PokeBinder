@@ -96,7 +96,7 @@ export function RegisterPage() {
               <input
                 value={inviteCode}
                 onChange={(event) => setInviteCode(event.target.value)}
-                placeholder="Enter invite code"
+                placeholder="Enter invite code (on GitHub PokeBinder README.md)"
                 autoComplete="off"
               />
             </label>
