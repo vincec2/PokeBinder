@@ -95,7 +95,7 @@ export class PokebinderStack extends Stack {
     const authFunction = new NodejsFunction(this, "AuthFunction", {
       entry: path.join(backendRoot, "src/functions/auth.ts"),
       handler: "handler",
-      runtime: Runtime.NODEJS_20_X,
+      runtime: Runtime.NODEJS_22_X,
       projectRoot: backendRoot,
       depsLockFilePath: path.join(backendRoot, "package-lock.json"),
       environment: {
@@ -118,7 +118,7 @@ export class PokebinderStack extends Stack {
     const healthFunction = new NodejsFunction(this, "HealthFunction", {
       entry: path.join(backendRoot, "src/functions/health.ts"),
       handler: "handler",
-      runtime: Runtime.NODEJS_20_X,
+      runtime: Runtime.NODEJS_22_X,
       projectRoot: backendRoot,
       depsLockFilePath: path.join(backendRoot, "package-lock.json"),
     });
@@ -126,7 +126,7 @@ export class PokebinderStack extends Stack {
     const bindersFunction = new NodejsFunction(this, "BindersFunction", {
       entry: path.join(backendRoot, "src/functions/binders.ts"),
       handler: "handler",
-      runtime: Runtime.NODEJS_20_X,
+      runtime: Runtime.NODEJS_22_X,
       projectRoot: backendRoot,
       depsLockFilePath: path.join(backendRoot, "package-lock.json"),
       environment: {
@@ -141,7 +141,7 @@ export class PokebinderStack extends Stack {
     const binderCardsFunction = new NodejsFunction(this, "BinderCardsFunction", {
       entry: path.join(backendRoot, "src/functions/binderCards.ts"),
       handler: "handler",
-      runtime: Runtime.NODEJS_20_X,
+      runtime: Runtime.NODEJS_22_X,
       projectRoot: backendRoot,
       depsLockFilePath: path.join(backendRoot, "package-lock.json"),
       environment: {
@@ -159,7 +159,7 @@ export class PokebinderStack extends Stack {
       {
         entry: path.join(backendRoot, "src/functions/publicBinders.ts"),
         handler: "handler",
-        runtime: Runtime.NODEJS_20_X,
+        runtime: Runtime.NODEJS_22_X,
         projectRoot: backendRoot,
         depsLockFilePath: path.join(backendRoot, "package-lock.json"),
         environment: {
