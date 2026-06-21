@@ -16,6 +16,7 @@ import {
   BillingMode,
   Table,
 } from "aws-cdk-lib/aws-dynamodb";
+import * as s3 from "aws-cdk-lib/aws-s3";
 
 export class PokebinderStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -63,6 +64,24 @@ export class PokebinderStack extends Stack {
       },
       billingMode: BillingMode.PAY_PER_REQUEST,
       removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    const imageBucket = new s3.Bucket(this, "PokebinderImageBucket", {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      cors: [
+        {
+          allowedMethods: [
+            s3.HttpMethods.PUT,
+            s3.HttpMethods.GET,
+            s3.HttpMethods.HEAD,
+          ],
+          allowedOrigins: ["*"],
+          allowedHeaders: ["*"],
+        },
+      ],
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
     });
 
     const userPool = new cognito.UserPool(this, "PokebinderUserPool", {
@@ -132,6 +151,7 @@ export class PokebinderStack extends Stack {
       environment: {
         BINDERS_TABLE_NAME: bindersTable.tableName,
         BINDER_CARDS_TABLE_NAME: binderCardsTable.tableName,
+        IMAGE_BUCKET_NAME: imageBucket.bucketName,
       },
       bundling: {
         externalModules: [],
@@ -165,12 +185,44 @@ export class PokebinderStack extends Stack {
         environment: {
           BINDERS_TABLE_NAME: bindersTable.tableName,
           BINDER_CARDS_TABLE_NAME: binderCardsTable.tableName,
+          IMAGE_BUCKET_NAME: imageBucket.bucketName,
         },
         bundling: {
           externalModules: [],
         },
       }
     );
+
+    const uploadsFunction = new NodejsFunction(this, "UploadsFunction", {
+      entry: path.join(backendRoot, "src/functions/uploads.ts"),
+      handler: "handler",
+      runtime: Runtime.NODEJS_22_X,
+      projectRoot: backendRoot,
+      depsLockFilePath: path.join(backendRoot, "package-lock.json"),
+      environment: {
+        BINDERS_TABLE_NAME: bindersTable.tableName,
+        IMAGE_BUCKET_NAME: imageBucket.bucketName,
+      },
+      bundling: {
+        externalModules: [],
+      },
+    });
+
+    const slotImagesFunction = new NodejsFunction(this, "SlotImagesFunction", {
+      entry: path.join(backendRoot, "src/functions/slotImages.ts"),
+      handler: "handler",
+      runtime: Runtime.NODEJS_22_X,
+      projectRoot: backendRoot,
+      depsLockFilePath: path.join(backendRoot, "package-lock.json"),
+      environment: {
+        BINDERS_TABLE_NAME: bindersTable.tableName,
+        BINDER_CARDS_TABLE_NAME: binderCardsTable.tableName,
+        IMAGE_BUCKET_NAME: imageBucket.bucketName,
+      },
+      bundling: {
+        externalModules: [],
+      },
+    });
 
     bindersTable.grantReadWriteData(bindersFunction);
     binderCardsTable.grantReadWriteData(bindersFunction);
@@ -180,6 +232,14 @@ export class PokebinderStack extends Stack {
 
     bindersTable.grantReadData(publicBindersFunction);
     binderCardsTable.grantReadData(publicBindersFunction);
+
+    bindersTable.grantReadData(uploadsFunction);
+    imageBucket.grantPut(uploadsFunction);
+    imageBucket.grantRead(bindersFunction);
+    imageBucket.grantRead(publicBindersFunction);
+    bindersTable.grantReadData(slotImagesFunction);
+    binderCardsTable.grantReadWriteData(slotImagesFunction);
+    imageBucket.grantRead(slotImagesFunction);
 
     const httpApi = new HttpApi(this, "PokebinderHttpApi", {
       apiName: "pokebinder-api",
@@ -219,6 +279,16 @@ export class PokebinderStack extends Stack {
     const publicBindersIntegration = new HttpLambdaIntegration(
       "PublicBindersIntegration",
       publicBindersFunction
+    );
+
+    const uploadsIntegration = new HttpLambdaIntegration(
+      "UploadsIntegration",
+      uploadsFunction
+    );
+
+    const slotImagesIntegration = new HttpLambdaIntegration(
+      "SlotImagesIntegration",
+      slotImagesFunction
     );
 
     httpApi.addRoutes({
@@ -274,6 +344,27 @@ export class PokebinderStack extends Stack {
       integration: publicBindersIntegration,
     });
 
+    httpApi.addRoutes({
+      path: "/uploads/cover-url",
+      methods: [HttpMethod.POST],
+      integration: uploadsIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: "/uploads/slot-image-url",
+      methods: [HttpMethod.POST],
+      integration: uploadsIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
+    httpApi.addRoutes({
+      path: "/binders/{binderId}/slot-images/{slotKey}",
+      methods: [HttpMethod.PUT, HttpMethod.DELETE],
+      integration: slotImagesIntegration,
+      authorizer: jwtAuthorizer,
+    });
+
     new CfnOutput(this, "ApiUrl", {
       value: httpApi.apiEndpoint,
     });
@@ -292,6 +383,10 @@ export class PokebinderStack extends Stack {
 
     new CfnOutput(this, "UserPoolClientId", {
       value: userPoolClient.userPoolClientId,
+    });
+
+    new CfnOutput(this, "ImageBucketName", {
+      value: imageBucket.bucketName,
     });
   }
 }

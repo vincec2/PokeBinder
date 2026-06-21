@@ -10,6 +10,9 @@ import {
   upsertBinderCard,
   createBinderShareLink,
   disableBinderShareLink,
+  uploadBinderCoverImage,
+  uploadBinderSlotImage,
+  deleteBinderSlotImage,
 } from "../api/binderApi";
 import {
   createDefaultBinder,
@@ -41,7 +44,9 @@ function normalizeApiBinder(binder: Binder): Binder {
     pageCount: binder.pageCount ?? MAX_BINDER_PAGES,
     isPublic: binder.isPublic ?? false,
     shareId: binder.shareId ?? null,
+    coverImageUrl: binder.coverImageUrl ?? null,
     previewPageColor: binder.previewPageColor ?? "#1b1814",
+    binderColor: binder.binderColor ?? "#5b4634",
     slots: binder.slots ?? [],
   });
 }
@@ -115,6 +120,30 @@ export function useApiBinders(options: { enabled?: boolean } = {}) {
     }));
   }
 
+  function clearSlotsLocally(binderId: string, slotKeys: string[]) {
+    const slotKeySet = new Set(slotKeys);
+    const now = new Date().toISOString();
+
+    updateBinderLocally(binderId, (currentBinder) => ({
+      ...currentBinder,
+      slots: currentBinder.slots.map((slot) =>
+        slotKeySet.has(slot.slotKey)
+          ? {
+              ...slot,
+              card: null,
+              image: null,
+              coveredBySlotKey: null,
+              status: "missing",
+              quantity: 0,
+              notes: "",
+              updatedAt: now,
+            }
+          : slot
+      ),
+      updatedAt: now,
+    }));
+  }
+
   const reloadBinders = useCallback(async () => {
     if (!enabled) {
       setState({
@@ -141,6 +170,7 @@ export function useApiBinders(options: { enabled?: boolean } = {}) {
           layout: template.layout,
           pageCount: template.pageCount,
           previewPageColor: template.previewPageColor,
+          binderColor: template.binderColor,
         });
 
         const normalizedBinder = normalizeApiBinder(createdBinder);
@@ -271,6 +301,67 @@ export function useApiBinders(options: { enabled?: boolean } = {}) {
     }
   }
 
+  function getSlotByKey(binderId: string, slotKey: string) {
+    return state.binders
+      .find((binder) => binder.binderId === binderId)
+      ?.slots.find((slot) => slot.slotKey === slotKey);
+  }
+
+  function canUseSlotForImage(slot: BinderSlot | undefined) {
+    return !!slot && !slot.card && !slot.image && !slot.coveredBySlotKey;
+  }
+
+  async function uploadSlotImage(
+    binderId: string,
+    slotKey: string,
+    file: File
+  ) {
+    const currentSlot = getSlotByKey(binderId, slotKey);
+
+    if (!currentSlot) {
+      setErrorMessage("Select a valid slot first.");
+      return false;
+    }
+
+    const isAllowedType = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ].includes(file.type);
+
+    if (!isAllowedType) {
+      setErrorMessage("Only JPG, PNG, and WEBP images are allowed.");
+      return false;
+    }
+
+    if (file.size > 1 * 1024 * 1024) {
+      setErrorMessage("Image must be 1 MB or smaller.");
+      return false;
+    }
+
+    if (!canUseSlotForImage(currentSlot)) {
+      setErrorMessage("This slot is already occupied.");
+      return false;
+    }
+
+    try {
+      const savedSlot = await uploadBinderSlotImage({
+        binderId,
+        slotKey,
+        pageNumber: currentSlot.pageNumber,
+        slotNumber: currentSlot.slotNumber,
+        file,
+      });
+
+      replaceSlotLocally(binderId, savedSlot);
+      return true;
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+      await reloadBinders();
+      return false;
+    }
+  }
+
   async function removeCard(binderId: string, slotKey: string) {
     const currentSlot = state.binders
       .find((binder) => binder.binderId === binderId)
@@ -293,6 +384,16 @@ export function useApiBinders(options: { enabled?: boolean } = {}) {
 
     try {
       await deleteBinderCard(binderId, slotKey);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+      await reloadBinders();
+    }
+  }
+
+  async function removeSlotImage(binderId: string, slotKey: string) {
+    try {
+      const result = await deleteBinderSlotImage(binderId, slotKey);
+      clearSlotsLocally(binderId, result.deletedSlotKeys);
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
       await reloadBinders();
@@ -376,6 +477,33 @@ export function useApiBinders(options: { enabled?: boolean } = {}) {
     }
   }
 
+  async function uploadCoverImage(binderId: string, file: File) {
+    const isAllowedType = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ].includes(file.type);
+
+    if (!isAllowedType) {
+      setErrorMessage("Only JPG, PNG, and WEBP images are allowed.");
+      return false;
+    }
+
+    if (file.size > 1 * 1024 * 1024) {
+      setErrorMessage("Cover image must be 1 MB or smaller.");
+      return false;
+    }
+
+    try {
+      const savedBinder = await uploadBinderCoverImage(binderId, file);
+      replaceBinder(savedBinder);
+      return true;
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+      return false;
+    }
+  }
+
   async function createBinder(layout: BinderLayout) {
     const template = createDefaultBinder(
       `Binder ${state.binders.length + 1}`,
@@ -389,6 +517,7 @@ export function useApiBinders(options: { enabled?: boolean } = {}) {
         layout: template.layout,
         pageCount: template.pageCount,
         previewPageColor: template.previewPageColor,
+        binderColor: template.binderColor,
       });
 
       const normalizedBinder = normalizeApiBinder(createdBinder);
@@ -462,6 +591,22 @@ export function useApiBinders(options: { enabled?: boolean } = {}) {
     scheduleBinderUpdate(binderId, { previewPageColor });
   }
 
+  function updateBinderColor(binderId: string, binderColor: string) {
+    const isValidHexColor = /^#[0-9a-fA-F]{6}$/.test(binderColor);
+
+    if (!isValidHexColor) {
+      return;
+    }
+
+    updateBinderLocally(binderId, (currentBinder) => ({
+      ...currentBinder,
+      binderColor,
+      updatedAt: new Date().toISOString(),
+    }));
+
+    scheduleBinderUpdate(binderId, { binderColor });
+  }
+
   const lastActiveBinderId =
     state.binders.find((binder) => binder.binderId === state.activeBinderId)
       ?.binderId ??
@@ -477,14 +622,18 @@ export function useApiBinders(options: { enabled?: boolean } = {}) {
     setActiveBinder,
     selectCard,
     removeCard,
+    removeSlotImage,
     changeStatus,
     updateBinderName,
     updateBinderDescription,
     createShareLink,
     disableShareLink,
+    uploadCoverImage,
+    uploadSlotImage,
     createBinder,
     deleteBinder,
     resetAllLocalData,
     updatePreviewPageColor,
+    updateBinderColor,
   };
 }

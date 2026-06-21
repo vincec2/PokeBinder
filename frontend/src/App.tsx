@@ -27,16 +27,20 @@ function App() {
     lastActiveBinderId,
     setActiveBinder,
     selectCard,
+    uploadSlotImage,
     removeCard,
+    removeSlotImage,
     changeStatus,
     updateBinderName,
     updateBinderDescription,
     createShareLink,
     disableShareLink,
+    uploadCoverImage,
     createBinder,
     deleteBinder,
     resetAllLocalData,
     updatePreviewPageColor,
+    updateBinderColor,
     isLoading,
     errorMessage,
     reloadBinders,
@@ -99,6 +103,7 @@ function App() {
             onCreateBinder={createBinder}
             onDeleteBinder={deleteBinder}
             onResetAllLocalData={resetAllLocalData}
+            onUploadCoverImage={uploadCoverImage}
           />
         }
       />
@@ -120,14 +125,18 @@ function App() {
             onCreateBinder={createBinder}
             onDeleteBinder={deleteBinder}
             onSelectCard={selectCard}
+            onUploadSlotImage={uploadSlotImage}
+            onRemoveSlotImage={removeSlotImage}
             onRemoveCard={removeCard}
             onChangeStatus={changeStatus}
             onUpdateBinderName={updateBinderName}
             onUpdateBinderDescription={updateBinderDescription}
             onCreateShareLink={createShareLink}
             onDisableShareLink={disableShareLink}
+            onUploadCoverImage={uploadCoverImage}
             onResetAllLocalData={resetAllLocalData}
             onUpdatePreviewPageColor={updatePreviewPageColor}
+            onUpdateBinderColor={updateBinderColor}
           />
         }
       />

@@ -2,11 +2,20 @@ import type { CardStatus, PokemonCard } from "./card";
 
 export type BinderLayout = "2x2" | "3x3";
 
+export type BinderSlotImage = {
+  imageKey: string;
+  imageUrl: string | null;
+  fileName: string;
+  span: 1 | 2;
+};
+
 export type BinderSlot = {
   slotKey: string;
   pageNumber: number;
   slotNumber: number;
   card: PokemonCard | null;
+  image: BinderSlotImage | null;
+  coveredBySlotKey: string | null;
   status: CardStatus;
   quantity: number;
   notes: string;
@@ -22,13 +31,10 @@ export type BinderRecord = {
   pageCount: number;
   layout: BinderLayout;
   previewPageColor: string;
+  binderColor?: string;
   isPublic: boolean;
-
-  // DynamoDB record:
-  // Private binders omit this entirely.
-  // Public binders store it as a real string.
   shareId?: string;
-
+  coverImageKey?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -37,11 +43,20 @@ export type BinderCardRecord = {
   binderId: string;
   slotKey: string;
   userId: string;
-  cardId: string;
-  cardName: string;
-  setName: string;
-  imageUrl: string;
+
+  slotType?: "card" | "image" | "covered";
+
+  cardId?: string;
+  cardName?: string;
+  setName?: string;
+  imageUrl?: string;
   rarity?: string;
+
+  slotImageKey?: string;
+  slotImageFileName?: string;
+  slotImageSpan?: 1 | 2;
+  coveredBySlotKey?: string;
+
   pageNumber: number;
   slotNumber: number;
   status: CardStatus;
@@ -52,9 +67,13 @@ export type BinderCardRecord = {
   updatedAt: string;
 };
 
-export type Binder = Omit<BinderRecord, "userId" | "createdAt" | "shareId"> & {
-  // API response:
-  // Frontend expects null when there is no share link.
+export type Binder = Omit<
+  BinderRecord,
+  "userId" | "createdAt" | "shareId" | "coverImageKey"
+> & {
   shareId: string | null;
+  coverImageKey: string | null;
+  coverImageUrl: string | null;
+  binderColor: string;
   slots: BinderSlot[];
 };

@@ -9,6 +9,8 @@ import { BinderPageControls } from "../components/BinderPageControls";
 import type { Binder, BinderLayout } from "../types/binder";
 import type { CardStatus, PokemonCard } from "../types/card";
 import { LogoutButton } from "../components/LogoutButton";
+import { UploadCoverImage } from "../components/UploadCoverImage";
+import { SlotImageUploader } from "../components/SlotImageUploader";
 
 type BinderEditorPageProps = {
   binders: Binder[];
@@ -16,7 +18,13 @@ type BinderEditorPageProps = {
   onCreateBinder: (layout: BinderLayout) => Promise<string>;
   onDeleteBinder: (binderId: string) => Promise<string | null>;
   onSelectCard: (binderId: string, slotKey: string, card: PokemonCard) => void;
+  onUploadSlotImage: (
+    binderId: string,
+    slotKey: string,
+    file: File
+  ) => Promise<boolean>;
   onRemoveCard: (binderId: string, slotKey: string) => void;
+  onRemoveSlotImage: (binderId: string, slotKey: string) => void;
   onChangeStatus: (
     binderId: string,
     slotKey: string,
@@ -26,11 +34,13 @@ type BinderEditorPageProps = {
   onUpdateBinderDescription: (binderId: string, description: string) => void;
   onCreateShareLink: (binderId: string) => Promise<string>;
   onDisableShareLink: (binderId: string) => Promise<void>;
+  onUploadCoverImage: (binderId: string, file: File) => Promise<boolean>;
   onResetAllLocalData: () => void;
   onUpdatePreviewPageColor: (
     binderId: string,
     previewBackgroundColor: string
   ) => void;
+  onUpdateBinderColor: (binderId: string, binderColor: string) => void;
 };
 
 export function BinderEditorPage({
@@ -39,14 +49,18 @@ export function BinderEditorPage({
   onCreateBinder,
   onDeleteBinder,
   onSelectCard,
+  onUploadSlotImage,
+  onRemoveSlotImage,
   onRemoveCard,
   onChangeStatus,
   onUpdateBinderName,
   onUpdateBinderDescription,
   onCreateShareLink,
   onDisableShareLink,
+  onUploadCoverImage,
   onResetAllLocalData,
   onUpdatePreviewPageColor,
+  onUpdateBinderColor,
 }: BinderEditorPageProps) {
   const { binderId } = useParams();
   const navigate = useNavigate();
@@ -188,6 +202,17 @@ export function BinderEditorPage({
           <input
             className="preview-color-picker"
             type="color"
+            aria-label="Binder colour"
+            title="Binder colour"
+            value={activeBinder.binderColor}
+            onChange={(event) =>
+              onUpdateBinderColor(activeBinder.binderId, event.target.value)
+            }
+          />
+
+          <input
+            className="preview-color-picker"
+            type="color"
             aria-label="Preview page colour"
             title="Preview page colour"
             value={activeBinder.previewPageColor}
@@ -244,6 +269,12 @@ export function BinderEditorPage({
               />
             </label>
           </section>
+
+          <UploadCoverImage
+            binderId={activeBinder.binderId}
+            coverImageUrl={activeBinder.coverImageUrl}
+            onUploadCoverImage={onUploadCoverImage}
+          />
 
           <section className="share-panel">
             <div>
@@ -314,21 +345,33 @@ export function BinderEditorPage({
                 onRemoveCard={(slotKey) =>
                   onRemoveCard(activeBinder.binderId, slotKey)
                 }
+                onRemoveSlotImage={(slotKey) =>
+                  onRemoveSlotImage(activeBinder.binderId, slotKey)
+                }
                 onChangeStatus={(slotKey, status) =>
                   onChangeStatus(activeBinder.binderId, slotKey, status)
                 }
               />
             </div>
 
-            <CardSearch
-              onSelectCard={(card) => {
-                if (!selectedSlotKey) {
-                  return;
-                }
+            <div className="slot-tools-panel">
+              <CardSearch
+                onSelectCard={(card) => {
+                  if (!selectedSlotKey || selectedSlot?.image) {
+                    return;
+                  }
 
-                onSelectCard(activeBinder.binderId, selectedSlotKey, card);
-              }}
-            />
+                  onSelectCard(activeBinder.binderId, selectedSlotKey, card);
+                }}
+              />
+
+              <SlotImageUploader
+                selectedSlot={selectedSlot}
+                onUploadSlotImage={(slotKey, file) =>
+                  onUploadSlotImage(activeBinder.binderId, slotKey, file)
+                }
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -360,6 +403,7 @@ export function BinderEditorPage({
             <BinderSpreadControls
               spreadIndex={previewSpreadIndex}
               onChangeSpread={setPreviewSpreadIndex}
+              showCover
             />
 
             <BinderPreview binder={activeBinder} spreadIndex={previewSpreadIndex} />

@@ -9,7 +9,7 @@ import { normalizeBinder } from "../lib/binderUtils";
 export function PublicBinderPage() {
   const { shareId } = useParams();
   const [binder, setBinder] = useState<Binder | null>(null);
-  const [spreadIndex, setSpreadIndex] = useState(0);
+  const [spreadIndex, setSpreadIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -88,6 +88,7 @@ export function PublicBinderPage() {
         <BinderSpreadControls
           spreadIndex={spreadIndex}
           onChangeSpread={setSpreadIndex}
+          showCover
         />
 
         <BinderPreview binder={binder} spreadIndex={spreadIndex} />

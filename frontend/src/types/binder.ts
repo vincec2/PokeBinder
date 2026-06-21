@@ -45,6 +45,13 @@ export function getBinderSpread(spreadIndex: number): BinderSpread {
   };
 }
 
+export type BinderSlotImage = {
+  imageKey: string;
+  imageUrl: string | null;
+  fileName: string;
+  span: 1 | 2;
+};
+
 export type BinderSlot = {
   slotKey: string;
   pageNumber: number;
@@ -54,6 +61,8 @@ export type BinderSlot = {
   quantity: number;
   notes: string;
   updatedAt: string;
+  image: BinderSlotImage | null;
+  coveredBySlotKey: string | null;
 };
 
 export type Binder = {
@@ -66,6 +75,9 @@ export type Binder = {
   slots: BinderSlot[];
   isPublic: boolean;
   shareId: string | null;
+  coverImageKey: string | null;
+  coverImageUrl: string | null;
   previewPageColor: string;
+  binderColor: string;
   updatedAt: string;
 };

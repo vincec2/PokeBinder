@@ -19,6 +19,15 @@ type SlotResponse = {
   slot: BinderSlot;
 };
 
+type SlotImageUploadUrlResponse = {
+  uploadUrl: string;
+  imageKey: string;
+};
+
+type DeleteSlotImageResponse = {
+  deletedSlotKeys: string[];
+};
+
 type DeleteBinderResponse = {
   deletedBinderId: string;
 };
@@ -32,12 +41,18 @@ type ShareResponse = {
   shareId: string;
 };
 
+type CoverUploadUrlResponse = {
+  uploadUrl: string;
+  imageKey: string;
+};
+
 export type CreateBinderInput = {
   name?: string;
   description?: string;
   layout: BinderLayout;
   pageCount: number;
   previewPageColor: string;
+  binderColor: string;
 };
 
 export type UpdateBinderInput = Partial<{
@@ -45,6 +60,8 @@ export type UpdateBinderInput = Partial<{
   description: string;
   layout: BinderLayout;
   previewPageColor: string;
+  binderColor: string;
+  coverImageKey: string;
 }>;
 
 function getApiBaseUrl() {
@@ -218,4 +235,97 @@ export async function getPublicBinder(shareId: string) {
   );
 
   return data.binder;
+}
+
+export async function uploadBinderCoverImage(
+  binderId: string,
+  file: File
+) {
+  const data = await apiRequest<CoverUploadUrlResponse>("/uploads/cover-url", {
+    method: "POST",
+    body: JSON.stringify({
+      binderId,
+      contentType: file.type,
+      sizeBytes: file.size,
+    }),
+  });
+
+  const uploadResponse = await fetch(data.uploadUrl, {
+    method: "PUT",
+    headers: {
+      "content-type": file.type,
+    },
+    body: file,
+  });
+
+  if (!uploadResponse.ok) {
+    throw new Error(`Image upload failed with ${uploadResponse.status}`);
+  }
+
+  return updateBinder(binderId, {
+    coverImageKey: data.imageKey,
+  });
+}
+
+export async function uploadBinderSlotImage(input: {
+  binderId: string;
+  slotKey: string;
+  pageNumber: number;
+  slotNumber: number;
+  file: File;
+}) {
+  const uploadData = await apiRequest<SlotImageUploadUrlResponse>(
+    "/uploads/slot-image-url",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        binderId: input.binderId,
+        contentType: input.file.type,
+        sizeBytes: input.file.size,
+      }),
+    }
+  );
+
+  const uploadResponse = await fetch(uploadData.uploadUrl, {
+    method: "PUT",
+    headers: {
+      "content-type": input.file.type,
+    },
+    body: input.file,
+  });
+
+  if (!uploadResponse.ok) {
+    throw new Error(`Image upload failed with ${uploadResponse.status}`);
+  }
+
+  const savedSlot = await apiRequest<SlotResponse>(
+    `/binders/${encodeURIComponent(
+      input.binderId
+    )}/slot-images/${encodeURIComponent(input.slotKey)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        imageKey: uploadData.imageKey,
+        fileName: input.file.name,
+        pageNumber: input.pageNumber,
+        slotNumber: input.slotNumber,
+      }),
+    }
+  );
+
+  return savedSlot.slot;
+}
+
+export async function deleteBinderSlotImage(
+  binderId: string,
+  slotKey: string
+) {
+  return apiRequest<DeleteSlotImageResponse>(
+    `/binders/${encodeURIComponent(
+      binderId
+    )}/slot-images/${encodeURIComponent(slotKey)}`,
+    {
+      method: "DELETE",
+    }
+  );
 }

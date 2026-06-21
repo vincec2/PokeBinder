@@ -3,6 +3,8 @@ import { BINDER_LAYOUT_SLOT_COUNTS, MAX_BINDER_PAGES } from "../types/binder";
 
 export const DEFAULT_PREVIEW_PAGE_COLOR = "#1b1814";
 
+export const DEFAULT_BINDER_COLOR = "#5b4634";
+
 export function generateId(prefix: string) {
   const randomPart =
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -32,6 +34,8 @@ export function createSlot(pageNumber: number, slotNumber: number): BinderSlot {
     quantity: 0,
     notes: "",
     updatedAt: new Date().toISOString(),
+    image: null,
+    coveredBySlotKey: null,
   };
 }
 
@@ -87,9 +91,17 @@ export function normalizeBinder(binder: Binder): Binder {
   const normalizedBinder: Binder = {
     ...binder,
     layout: binder.layout ?? "3x3",
+    slots: (binder.slots ?? []).map((slot) => ({
+      ...slot,
+      card: slot.card ?? null,
+      image: slot.image ?? null,
+      coveredBySlotKey: slot.coveredBySlotKey ?? null,
+    })),
     pageCount: binder.pageCount ?? MAX_BINDER_PAGES,
     isPublic: binder.isPublic ?? false,
     shareId: binder.shareId ?? null,
+    coverImageKey: binder.coverImageKey ?? null,
+    coverImageUrl: binder.coverImageUrl ?? null,
     previewPageColor: binder.previewPageColor ?? DEFAULT_PREVIEW_PAGE_COLOR,
   };
 
@@ -110,7 +122,10 @@ export function createDefaultBinder(
     slots: createEmptySlots(layout, MAX_BINDER_PAGES),
     isPublic: false,
     shareId: null,
+    coverImageKey: null,
+    coverImageUrl: null,
     previewPageColor: DEFAULT_PREVIEW_PAGE_COLOR,
+    binderColor: DEFAULT_BINDER_COLOR,
     updatedAt: new Date().toISOString(),
   };
 }

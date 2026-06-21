@@ -8,6 +8,7 @@ type MyBindersPageProps = {
   onCreateBinder: (layout: BinderLayout) => Promise<string>;
   onDeleteBinder: (binderId: string) => Promise<string | null>;
   onResetAllLocalData: () => void;
+  onUploadCoverImage: (binderId: string, file: File) => Promise<boolean>;
 };
 
 export function MyBindersPage({
@@ -15,9 +16,12 @@ export function MyBindersPage({
   onCreateBinder,
   onDeleteBinder,
   onResetAllLocalData,
+  onUploadCoverImage,
 }: MyBindersPageProps) {
   const navigate = useNavigate();
   const [isChoosingLayout, setIsChoosingLayout] = useState(false);
+  const [uploadingBinderId, setUploadingBinderId] = useState<string | null>(null);
+  const [coverUploadError, setCoverUploadError] = useState<string | null>(null);
 
   async function handleCreateBinder(layout: BinderLayout) {
     const newBinderId = await onCreateBinder(layout);
@@ -29,6 +33,25 @@ export function MyBindersPage({
 
     if (nextBinderId) {
       navigate("/my-binders");
+    }
+  }
+
+  async function handleCoverUpload(binderId: string, file: File | undefined) {
+    if (!file) {
+      return;
+    }
+
+    setCoverUploadError(null);
+    setUploadingBinderId(binderId);
+
+    try {
+      const wasUploaded = await onUploadCoverImage(binderId, file);
+
+      if (!wasUploaded) {
+        setCoverUploadError("Cover image could not be uploaded.");
+      }
+    } finally {
+      setUploadingBinderId(null);
     }
   }
 
@@ -82,12 +105,27 @@ export function MyBindersPage({
         </section>
       )}
 
+      {coverUploadError && (
+        <p className="form-error">{coverUploadError}</p>
+      )}
+
       <section className="binder-card-grid">
         {binders.map((binder) => {
           const cardCount = binder.slots.filter((slot) => slot.card).length;
 
           return (
             <article className="binder-summary-card" key={binder.binderId}>
+
+              <div className="binder-cover-preview">
+                {binder.coverImageUrl ? (
+                  <img src={binder.coverImageUrl} alt={`${binder.name} cover`} />
+                ) : (
+                  <div className="binder-cover-placeholder">
+                    <span>No cover</span>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <p className="eyebrow">{binder.layout} Binder</p>
                 <h2>{binder.name}</h2>
@@ -98,6 +136,20 @@ export function MyBindersPage({
               </div>
 
               <div className="binder-summary-actions">
+
+                <label className="secondary-button binder-cover-upload-button">
+                  {uploadingBinderId === binder.binderId ? "Uploading..." : "Change Cover"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    disabled={uploadingBinderId === binder.binderId}
+                    onChange={(event) => {
+                      void handleCoverUpload(binder.binderId, event.target.files?.[0]);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                
                 <Link className="primary-button" to={`/binders/${binder.binderId}`}>
                   Open Binder
                 </Link>

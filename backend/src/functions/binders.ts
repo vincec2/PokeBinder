@@ -18,9 +18,16 @@ import type {
   BinderRecord,
   BinderSlot,
 } from "../types/binder";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { getImageUrl } from "../lib/s3Images";
 
 const DEFAULT_PAGE_COUNT = 5;
 const DEFAULT_PREVIEW_PAGE_COLOR = "#1b1814";
+const DEFAULT_BINDER_COLOR = "#5b4634";
+
+const IMAGE_BUCKET_NAME = process.env.IMAGE_BUCKET_NAME;
+const s3Client = new S3Client({});
 
 function getBindersTableName() {
   const tableName = process.env.BINDERS_TABLE_NAME;
@@ -42,18 +49,58 @@ function getBinderCardsTableName() {
   return tableName;
 }
 
-function toApiSlot(record: BinderCardRecord): BinderSlot {
+async function toApiSlot(record: BinderCardRecord): Promise<BinderSlot> {
+  if (record.slotType === "covered") {
+    return {
+      slotKey: record.slotKey,
+      pageNumber: record.pageNumber,
+      slotNumber: record.slotNumber,
+      card: null,
+      image: null,
+      coveredBySlotKey: record.coveredBySlotKey ?? null,
+      status: "missing",
+      quantity: 0,
+      notes: "",
+      updatedAt: record.updatedAt,
+    };
+  }
+
+  if (record.slotType === "image" && record.slotImageKey) {
+    return {
+      slotKey: record.slotKey,
+      pageNumber: record.pageNumber,
+      slotNumber: record.slotNumber,
+      card: null,
+      image: {
+        imageKey: record.slotImageKey,
+        imageUrl: await getImageUrl(record.slotImageKey),
+        fileName: record.slotImageFileName ?? "Binder image",
+        span: record.slotImageSpan ?? 1,
+      },
+      coveredBySlotKey: null,
+      status: "owned",
+      quantity: 1,
+      notes: record.notes,
+      updatedAt: record.updatedAt,
+    };
+  }
+
   return {
     slotKey: record.slotKey,
     pageNumber: record.pageNumber,
     slotNumber: record.slotNumber,
-    card: {
-      cardId: record.cardId,
-      name: record.cardName,
-      setName: record.setName,
-      imageUrl: record.imageUrl,
-      rarity: record.rarity,
-    },
+    card:
+      record.cardId && record.cardName && record.setName && record.imageUrl
+        ? {
+            cardId: record.cardId,
+            name: record.cardName,
+            setName: record.setName,
+            imageUrl: record.imageUrl,
+            rarity: record.rarity,
+          }
+        : null,
+    image: null,
+    coveredBySlotKey: null,
     status: record.status,
     quantity: record.quantity,
     notes: record.notes,
@@ -61,7 +108,10 @@ function toApiSlot(record: BinderCardRecord): BinderSlot {
   };
 }
 
-function toApiBinder(record: BinderRecord, slots: BinderSlot[] = []): Binder {
+async function toApiBinder(
+  record: BinderRecord,
+  slots: BinderSlot[] = []
+): Promise<Binder> {
   return {
     binderId: record.binderId,
     name: record.name,
@@ -72,7 +122,10 @@ function toApiBinder(record: BinderRecord, slots: BinderSlot[] = []): Binder {
     slots,
     isPublic: record.isPublic,
     shareId: record.shareId ?? null,
+    coverImageKey: record.coverImageKey ?? null,
+    coverImageUrl: await getCoverImageUrl(record.coverImageKey),
     previewPageColor: record.previewPageColor,
+    binderColor: record.binderColor ?? DEFAULT_BINDER_COLOR,
     updatedAt: record.updatedAt,
   };
 }
@@ -131,12 +184,15 @@ async function getBinderSlots(binderId: string) {
 
   const records = (result.Items ?? []) as BinderCardRecord[];
 
-  return records
-    .map(toApiSlot)
-    .sort(
-      (a, b) =>
-        a.pageNumber - b.pageNumber || a.slotNumber - b.slotNumber
-    );
+  const slots = await Promise.all(records.map((record) => toApiSlot(record)));
+
+  return slots.sort((a, b) => {
+    if (a.pageNumber !== b.pageNumber) {
+      return a.pageNumber - b.pageNumber;
+    }
+
+    return a.slotNumber - b.slotNumber;
+  });
 }
 
 async function deleteBinderSlots(binderId: string) {
@@ -191,9 +247,11 @@ async function listBinders(userId: string) {
 
   const binderRecords = (result.Items ?? []) as BinderRecord[];
 
-  const binders = binderRecords
-    .map((record) => toApiBinder(record))
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const binders = await Promise.all(
+    binderRecords.map((record) => toApiBinder(record))
+  );
+
+  binders.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   return jsonResponse(200, {
     binders,
@@ -220,7 +278,7 @@ async function getBinder(userId: string, event: APIGatewayProxyEventV2) {
   const slots = await getBinderSlots(binderId);
 
   return jsonResponse(200, {
-    binder: toApiBinder(binderRecord, slots),
+    binder: await toApiBinder(binderRecord, slots),
   });
 }
 
@@ -254,6 +312,11 @@ async function createBinder(event: APIGatewayProxyEventV2, userId: string) {
       /^#[0-9a-fA-F]{6}$/.test(body.previewPageColor)
         ? body.previewPageColor
         : DEFAULT_PREVIEW_PAGE_COLOR,
+    binderColor:
+      typeof body.binderColor === "string" &&
+      /^#[0-9a-fA-F]{6}$/.test(body.binderColor)
+        ? body.binderColor
+        : DEFAULT_BINDER_COLOR,
     layout: getValidatedLayout(body.layout),
     isPublic: false,
     createdAt: now,
@@ -270,7 +333,7 @@ async function createBinder(event: APIGatewayProxyEventV2, userId: string) {
   );
 
   return jsonResponse(201, {
-    binder: toApiBinder(binderRecord),
+    binder: await toApiBinder(binderRecord),
   });
 }
 
@@ -312,6 +375,17 @@ async function updateBinder(event: APIGatewayProxyEventV2, userId: string) {
       ? body.previewPageColor
       : undefined;
 
+  const binderColor =
+    typeof body.binderColor === "string" &&
+    /^#[0-9a-fA-F]{6}$/.test(body.binderColor)
+      ? body.binderColor
+      : undefined;
+
+  const coverImageKey =
+    typeof body.coverImageKey === "string" && body.coverImageKey.trim()
+      ? body.coverImageKey.trim()
+      : undefined;
+
   const updateParts = ["#updatedAt = :updatedAt"];
   const expressionAttributeNames: Record<string, string> = {
     "#updatedAt": "updatedAt",
@@ -336,6 +410,18 @@ async function updateBinder(event: APIGatewayProxyEventV2, userId: string) {
     updateParts.push("#previewPageColor = :previewPageColor");
     expressionAttributeNames["#previewPageColor"] = "previewPageColor";
     expressionAttributeValues[":previewPageColor"] = previewPageColor;
+  }
+
+  if (binderColor !== undefined) {
+    updateParts.push("#binderColor = :binderColor");
+    expressionAttributeNames["#binderColor"] = "binderColor";
+    expressionAttributeValues[":binderColor"] = binderColor;
+  }
+
+  if (coverImageKey !== undefined) {
+    updateParts.push("#coverImageKey = :coverImageKey");
+    expressionAttributeNames["#coverImageKey"] = "coverImageKey";
+    expressionAttributeValues[":coverImageKey"] = coverImageKey;
   }
 
   if (layout !== undefined) {
@@ -371,7 +457,7 @@ async function updateBinder(event: APIGatewayProxyEventV2, userId: string) {
     const slots = await getBinderSlots(binderId);
 
     return jsonResponse(200, {
-      binder: toApiBinder(updatedBinderRecord, slots),
+      binder: await toApiBinder(updatedBinderRecord, slots),
     });
   } catch (error) {
     if (
@@ -467,7 +553,7 @@ async function createShareLink(event: APIGatewayProxyEventV2, userId: string) {
     const slots = await getBinderSlots(binderId);
 
     return jsonResponse(200, {
-      binder: toApiBinder(updatedBinderRecord, slots),
+      binder: await toApiBinder(updatedBinderRecord, slots),
       shareId,
     });
   } catch (error) {
@@ -524,7 +610,7 @@ async function disableShareLink(event: APIGatewayProxyEventV2, userId: string) {
     const slots = await getBinderSlots(binderId);
 
     return jsonResponse(200, {
-      binder: toApiBinder(updatedBinderRecord, slots),
+      binder: await toApiBinder(updatedBinderRecord, slots),
     });
   } catch (error) {
     if (
@@ -538,6 +624,27 @@ async function disableShareLink(event: APIGatewayProxyEventV2, userId: string) {
 
     throw error;
   }
+}
+
+async function getCoverImageUrl(coverImageKey?: string) {
+  if (!coverImageKey) {
+    return null;
+  }
+
+  if (!IMAGE_BUCKET_NAME) {
+    throw new Error("IMAGE_BUCKET_NAME environment variable is not set.");
+  }
+
+  return getSignedUrl(
+    s3Client,
+    new GetObjectCommand({
+      Bucket: IMAGE_BUCKET_NAME,
+      Key: coverImageKey,
+    }),
+    {
+      expiresIn: 3600,
+    }
+  );
 }
 
 export async function handler(event: APIGatewayProxyEventV2) {

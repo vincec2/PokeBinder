@@ -1,0 +1,10 @@
+cd frontend
+npm run build
+
+cd ..\backend
+npm run typecheck
+
+cd ..\infra\cdk
+set POKEBINDER_INVITE_CODE=YourInviteCodeHere
+npm run synth
+npx cdk deploy

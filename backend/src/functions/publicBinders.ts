@@ -2,11 +2,59 @@ import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { documentClient } from "../lib/dynamodb.js";
 import { jsonResponse } from "../lib/response.js";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const BINDERS_TABLE_NAME = process.env.BINDERS_TABLE_NAME;
 const BINDER_CARDS_TABLE_NAME = process.env.BINDER_CARDS_TABLE_NAME;
+const IMAGE_BUCKET_NAME = process.env.IMAGE_BUCKET_NAME;
+const s3Client = new S3Client({});
+const DEFAULT_BINDER_COLOR = "#5b4634";
 
-function mapCardItemToSlot(item: Record<string, unknown>) {
+async function mapCardItemToSlot(item: Record<string, unknown>) {
+  const slotType = item.slotType;
+
+  if (slotType === "covered") {
+    return {
+      slotKey: item.slotKey,
+      pageNumber: item.pageNumber,
+      slotNumber: item.slotNumber,
+      card: null,
+      image: null,
+      coveredBySlotKey:
+        typeof item.coveredBySlotKey === "string"
+          ? item.coveredBySlotKey
+          : null,
+      status: item.status ?? "missing",
+      quantity: item.quantity ?? 0,
+      notes: item.notes ?? "",
+      updatedAt: item.updatedAt ?? item.addedAt ?? new Date().toISOString(),
+    };
+  }
+
+  if (slotType === "image" && typeof item.slotImageKey === "string") {
+    return {
+      slotKey: item.slotKey,
+      pageNumber: item.pageNumber,
+      slotNumber: item.slotNumber,
+      card: null,
+      image: {
+        imageKey: item.slotImageKey,
+        imageUrl: await getCoverImageUrl(item.slotImageKey),
+        fileName:
+          typeof item.slotImageFileName === "string"
+            ? item.slotImageFileName
+            : "Binder image",
+        span: 1,
+      },
+      coveredBySlotKey: null,
+      status: "owned",
+      quantity: 1,
+      notes: item.notes ?? "",
+      updatedAt: item.updatedAt ?? item.addedAt ?? new Date().toISOString(),
+    };
+  }
+
   const cardId = item.cardId;
   const cardName = item.cardName;
   const setName = item.setName;
@@ -28,15 +76,37 @@ function mapCardItemToSlot(item: Record<string, unknown>) {
           name: cardName,
           setName,
           imageUrl,
-          rarity:
-            typeof item.rarity === "string" ? item.rarity : undefined,
+          rarity: typeof item.rarity === "string" ? item.rarity : undefined,
         }
       : null,
+    image: null,
+    coveredBySlotKey: null,
     status: item.status ?? "owned",
     quantity: item.quantity ?? 1,
     notes: item.notes ?? "",
     updatedAt: item.updatedAt ?? item.addedAt ?? new Date().toISOString(),
   };
+}
+
+async function getCoverImageUrl(coverImageKey?: string) {
+  if (!coverImageKey) {
+    return null;
+  }
+
+  if (!IMAGE_BUCKET_NAME) {
+    throw new Error("IMAGE_BUCKET_NAME environment variable is not set.");
+  }
+
+  return getSignedUrl(
+    s3Client,
+    new GetObjectCommand({
+      Bucket: IMAGE_BUCKET_NAME,
+      Key: coverImageKey,
+    }),
+    {
+      expiresIn: 3600,
+    }
+  );
 }
 
 export async function handler(event: APIGatewayProxyEventV2) {
@@ -84,13 +154,15 @@ export async function handler(event: APIGatewayProxyEventV2) {
     })
   );
 
-  const slots = (cardsResult.Items ?? [])
-    .map((item) => mapCardItemToSlot(item))
-    .sort(
-      (a, b) =>
-        Number(a.pageNumber) - Number(b.pageNumber) ||
-        Number(a.slotNumber) - Number(b.slotNumber)
-    );
+  const slots = (
+    await Promise.all(
+      (cardsResult.Items ?? []).map((item) => mapCardItemToSlot(item))
+    )
+  ).sort(
+    (a, b) =>
+      Number(a.pageNumber) - Number(b.pageNumber) ||
+      Number(a.slotNumber) - Number(b.slotNumber)
+  );
 
   return jsonResponse(200, {
     binder: {
@@ -101,8 +173,18 @@ export async function handler(event: APIGatewayProxyEventV2) {
       pageCount: binder.pageCount ?? 5,
       layout: binder.layout,
       previewPageColor: binder.previewPageColor ?? "#1b1814",
+      binderColor:
+        typeof binder.binderColor === "string"
+          ? binder.binderColor
+          : DEFAULT_BINDER_COLOR,
       isPublic: binder.isPublic,
       shareId: binder.shareId,
+      coverImageKey:
+        typeof binder.coverImageKey === "string" ? binder.coverImageKey : null,
+      coverImageUrl:
+        typeof binder.coverImageKey === "string"
+          ? await getCoverImageUrl(binder.coverImageKey)
+          : null,
       updatedAt: binder.updatedAt,
       slots,
     },

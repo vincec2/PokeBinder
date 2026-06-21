@@ -14,6 +14,7 @@ import type {
   BinderSlot,
 } from "../types/binder";
 import type { CardStatus, PokemonCard } from "../types/card";
+import { getImageUrl } from "../lib/s3Images";
 
 const VALID_STATUSES: CardStatus[] = [
   "owned",
@@ -101,18 +102,58 @@ function isPokemonCard(value: unknown): value is PokemonCard {
   );
 }
 
-function toApiSlot(record: BinderCardRecord): BinderSlot {
+async function toApiSlot(record: BinderCardRecord): Promise<BinderSlot> {
+  if (record.slotType === "covered") {
+    return {
+      slotKey: record.slotKey,
+      pageNumber: record.pageNumber,
+      slotNumber: record.slotNumber,
+      card: null,
+      image: null,
+      coveredBySlotKey: record.coveredBySlotKey ?? null,
+      status: "missing",
+      quantity: 0,
+      notes: "",
+      updatedAt: record.updatedAt,
+    };
+  }
+
+  if (record.slotType === "image" && record.slotImageKey) {
+    return {
+      slotKey: record.slotKey,
+      pageNumber: record.pageNumber,
+      slotNumber: record.slotNumber,
+      card: null,
+      image: {
+        imageKey: record.slotImageKey,
+        imageUrl: await getImageUrl(record.slotImageKey),
+        fileName: record.slotImageFileName ?? "Binder image",
+        span: record.slotImageSpan ?? 1,
+      },
+      coveredBySlotKey: null,
+      status: "owned",
+      quantity: 1,
+      notes: record.notes,
+      updatedAt: record.updatedAt,
+    };
+  }
+
   return {
     slotKey: record.slotKey,
     pageNumber: record.pageNumber,
     slotNumber: record.slotNumber,
-    card: {
-      cardId: record.cardId,
-      name: record.cardName,
-      setName: record.setName,
-      imageUrl: record.imageUrl,
-      rarity: record.rarity,
-    },
+    card:
+      record.cardId && record.cardName && record.setName && record.imageUrl
+        ? {
+            cardId: record.cardId,
+            name: record.cardName,
+            setName: record.setName,
+            imageUrl: record.imageUrl,
+            rarity: record.rarity,
+          }
+        : null,
+    image: null,
+    coveredBySlotKey: null,
     status: record.status,
     quantity: record.quantity,
     notes: record.notes,
@@ -166,9 +207,15 @@ async function listBinderCards(event: APIGatewayProxyEventV2, userId: string) {
 
   const cards = (result.Items ?? []) as BinderCardRecord[];
 
-  const slots = cards
-    .map(toApiSlot)
-    .sort((a, b) => a.slotNumber - b.slotNumber);
+  const slots = await Promise.all(cards.map((record) => toApiSlot(record)));
+
+  slots.sort((a, b) => {
+    if (a.pageNumber !== b.pageNumber) {
+      return a.pageNumber - b.pageNumber;
+    }
+
+    return a.slotNumber - b.slotNumber;
+});
 
   return jsonResponse(200, {
     slots,
@@ -215,12 +262,35 @@ async function upsertBinderCard(event: APIGatewayProxyEventV2, userId: string) {
   }
 
   const { pageNumber, slotNumber } = parseSlotKey(slotKey);
+  const existingSlot = await documentClient.send(
+    new GetCommand({
+      TableName: getBinderCardsTableName(),
+      Key: {
+        binderId,
+        slotKey,
+      },
+    })
+  );
+
+  const existingSlotRecord = existingSlot.Item as BinderCardRecord | undefined;
+
+  if (
+    existingSlotRecord &&
+    existingSlotRecord.slotType !== "card" &&
+    existingSlotRecord.slotType !== undefined
+  ) {
+    return jsonResponse(409, {
+      message: "This slot is already occupied by an image.",
+    });
+  }
+
   const now = new Date().toISOString();
 
   const cardRecord: BinderCardRecord = {
     binderId,
     slotKey,
     userId,
+    slotType: "card",
     cardId: body.card.cardId,
     cardName: body.card.name,
     setName: body.card.setName,
@@ -247,7 +317,7 @@ async function upsertBinderCard(event: APIGatewayProxyEventV2, userId: string) {
   );
 
   return jsonResponse(200, {
-    slot: toApiSlot(cardRecord),
+    slot: await toApiSlot(cardRecord),
   });
 }
 
